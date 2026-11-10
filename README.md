@@ -7,7 +7,7 @@
 
 물류창고의 재고를 관리하는 백오피스와, 창고 현장에서 재고 실사를 하는 작업자용 PWA를 한 저장소에 담은 모노레포입니다. 두 사람이 같은 재고를 동시에 고쳐도, 실사 도중 물건이 들고 나도, 음영 지역에서 연결이 끊겨도 재고가 어긋나지 않도록 동시성 제어에 집중했습니다.
 
-**[백오피스 보기](https://sog-pi.vercel.app/)** · **[현장 실사 앱 보기](https://sog-pi.vercel.app/count/)** · **[Storybook](https://sog-pi.vercel.app/storybook/backoffice)** · 로그인 없이 바로 쓸 수 있습니다. 같은 브라우저에서 두 앱을 열면 실사 앱에서 센 수량이 백오피스에 바로 나타납니다.
+**[백오피스 보기](https://sog-ryushin01.vercel.app/)** · **[현장 실사 앱 보기](https://sog-ryushin01.vercel.app/count/)** · **[Storybook](https://sog-ryushin01.vercel.app/storybook/backoffice)** · 로그인 없이 바로 쓸 수 있습니다. 같은 브라우저에서 두 앱을 열면 실사 앱에서 센 수량이 백오피스에 바로 나타납니다.
 
 > **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 백엔드 대신 브라우저 안의 데모 서버(IndexedDB)로 동작하며, 품목·작업자·재고는 모두 가상 데이터입니다.
 
