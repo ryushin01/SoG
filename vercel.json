@@ -2,54 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm turbo run build build-storybook --filter=@sog/backoffice --filter=@sog/count && node scripts/assemble-site.mjs",
-  "outputDirectory": "site",
-  "redirects": [
-    {
-      "source": "/count",
-      "destination": "/count/",
-      "permanent": true
-    },
-    {
-      "source": "/storybook/:app(backoffice|count)",
-      "destination": "/storybook/:app/index.html",
-      "permanent": false
-    },
-    {
-      "source": "/storybook/:app(backoffice|count)/",
-      "destination": "/storybook/:app/index.html",
-      "permanent": false
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/count/:path*",
-      "destination": "/count/index.html"
-    },
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/count/(ngsw-worker.js|ngsw.json|safety-worker.js)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache"
-        }
-      ]
-    },
-    {
-      "source": "/((?:count/)?(?:chunk|main|polyfills|styles)-[^/]+\\.(?:js|css))",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ],
+  "buildCommand": "pnpm turbo run build build-storybook --filter=@sog/backoffice --filter=@sog/count && node scripts/build-vercel.mjs",
   "ignoreCommand": "bash scripts/vercel-ignore.sh"
 }

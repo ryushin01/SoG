@@ -5,7 +5,7 @@ import { WMS_SERVER_OPTIONS } from './host';
 import { PRESENCE_APP } from './presence';
 import { wmsInterceptor } from './interceptor';
 
-export { WMS_SERVER_OPTIONS, WmsHost } from './host';
+export { WMS_SERVER_OPTIONS, WmsHost, type WmsMode } from './host';
 export { idempotencyKey, ifMatch, isVersionConflict, SubmitLock, toApiError } from './http';
 export { ApiIdentity, wmsInterceptor } from './interceptor';
 export { NetworkState } from './network';

@@ -48,6 +48,7 @@ import {
 } from '@sog/domain';
 import { Database, STORES, type WriteOp } from './idb';
 import { createLock, type Lock } from './lock';
+import { broadcastPublisher, type ChangePublisher, type Storage } from './storage';
 import { createSeed, ZONES } from './seed';
 
 export interface ServerRequest {
@@ -70,6 +71,12 @@ export interface WmsServerOptions {
   latency?: [number, number];
   now?: () => Date;
   channelName?: string;
+  /** 저장 계층. 없으면 IndexedDB(dbName)를 씁니다. */
+  storage?: Storage;
+  /** 쓰기 직렬화. 없으면 Web Locks(탭 사이 공유)를 씁니다. */
+  lock?: Lock;
+  /** 변경 알림. 없으면 BroadcastChannel을 씁니다. */
+  publisher?: ChangePublisher;
 }
 
 export interface WmsServer {
@@ -94,6 +101,8 @@ export class HttpError extends Error {
 
 interface Context {
   user: User;
+  /** 요청을 보낸 탭. 원격 클라이언트는 x-sog-origin으로 알려 자기 변경을 구분합니다. */
+  origin: string;
   ifMatch: number | null;
   idempotencyKey: string | null;
   query: URLSearchParams;
@@ -128,16 +137,10 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   const now = options.now ?? (() => new Date());
   const [minDelay, maxDelay] = options.latency ?? [0, 0];
   const origin = Math.random().toString(36).slice(2, 10);
-  const lock: Lock = createLock(`${dbName}:write`);
-  const db = await Database.open(dbName);
-  const listeners = new Set<(event: ChangeEvent) => void>();
-  const channel =
-    typeof BroadcastChannel !== 'undefined'
-      ? new BroadcastChannel(options.channelName ?? `${dbName}:changes`)
-      : null;
-  channel?.addEventListener('message', (message: MessageEvent<ChangeEvent>) => {
-    listeners.forEach((listener) => listener(message.data));
-  });
+  const lock: Lock = options.lock ?? createLock(`${dbName}:write`);
+  const db: Storage = options.storage ?? (await Database.open(dbName));
+  const publisher =
+    options.publisher ?? broadcastPublisher(options.channelName ?? `${dbName}:changes`);
 
   let seq = 0;
   const newId = (prefix: string) =>
@@ -394,20 +397,19 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         });
       }
       await db.write(ops);
-      emit({
+      await emit({
         topics: result.topics,
         by: ctx.user.id,
         at,
-        origin,
+        origin: ctx.origin,
         message: result.activity[0]?.message ?? '',
       });
       return json(status, result.body, result.etag);
     });
   }
 
-  function emit(event: ChangeEvent) {
-    listeners.forEach((listener) => listener(event));
-    channel?.postMessage(event);
+  function emit(event: ChangeEvent): void | Promise<void> {
+    return publisher.publish(event);
   }
 
   function json(
@@ -729,11 +731,11 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       async (ctx) =>
         lock(async () => {
           await writeSeed();
-          emit({
+          await emit({
             topics: ['*'],
             by: ctx.user.id,
             at: now().toISOString(),
-            origin,
+            origin: ctx.origin,
             message: '데모 데이터를 초기화했습니다.',
           });
           return json(204, null);
@@ -1699,6 +1701,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         return await handler(
           {
             user,
+            origin: header('x-sog-origin') ?? origin,
             ifMatch: ifMatch === null || Number.isNaN(ifMatch) ? null : ifMatch,
             idempotencyKey: header('idempotency-key'),
             query: url.searchParams,
@@ -1742,12 +1745,13 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     origin,
     handle,
     subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+      return publisher.subscribe(listener);
     },
     async reset() {
-      await lock(writeSeed);
-      emit({
+      await lock(async () => {
+        await writeSeed();
+      });
+      await emit({
         topics: ['*'],
         by: 'system',
         at: now().toISOString(),
@@ -1756,7 +1760,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       });
     },
     close() {
-      channel?.close();
+      publisher.close();
       db.close();
     },
   };

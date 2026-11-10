@@ -35,8 +35,9 @@ test('다른 관리자가 같은 품목을 수정 중이면 미리 알려 준다
   await other.getByLabel('안전 재고').fill('44');
   await expect(notice).toContainText('수정 중');
 
+  // 탭을 닫으면 떠났다고 알리고, 알림을 못 받아도 15초 뒤에는 사라집니다.
   await other.close();
-  await expect(notice).toHaveCount(0);
+  await expect(notice).toHaveCount(0, { timeout: 20_000 });
 });
 
 test('현장 작업자가 같은 품목을 보고 있으면 다른 작업자에게 알려 준다', async ({

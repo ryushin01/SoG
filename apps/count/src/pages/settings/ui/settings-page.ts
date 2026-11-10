@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { NetworkState } from '@/shared/api';
+import { NetworkState, WmsHost } from '@/shared/api';
 import { AgoPipe } from '@/shared/lib';
 import { OperatorSession } from '@/entities/operator';
 import { Outbox } from '@/entities/outbox';
@@ -15,6 +15,7 @@ import { Outbox } from '@/entities/outbox';
 export class SettingsPage {
   protected readonly outbox = inject(Outbox);
   protected readonly network = inject(NetworkState);
+  protected readonly host = inject(WmsHost);
   protected readonly session = inject(OperatorSession);
   private readonly router = inject(Router);
 

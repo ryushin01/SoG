@@ -8,6 +8,7 @@ import {
   type Signal,
   signal,
 } from '@angular/core';
+import { WmsHost } from './host';
 import { ApiIdentity } from './interceptor';
 
 export interface PresenceState {
@@ -35,6 +36,7 @@ export const PRESENCE_APP = new InjectionToken<string>('PRESENCE_APP', { factory
 const CHANNEL = 'sog-presence';
 const HEARTBEAT_MS = 5_000;
 const EXPIRE_MS = 15_000;
+const REMOTE_POLL_MS = 3_000;
 
 /**
  * 실시간 접속 표시. 같은 브라우저의 다른 탭(다른 사용자, 현장 앱)이 어느 자원을 보고 있는지,
@@ -45,6 +47,7 @@ const EXPIRE_MS = 15_000;
 export class Presence {
   private readonly identity = inject(ApiIdentity);
   private readonly app = inject(PRESENCE_APP);
+  private readonly host = inject(WmsHost);
   private readonly tabId = Math.random().toString(36).slice(2, 10);
   private readonly channel =
     typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
@@ -70,6 +73,14 @@ export class Presence {
     });
     // 새로 연 탭이 다른 탭의 현재 위치를 바로 알 수 있게 물어봅니다.
     this.send({ type: 'ping' });
+    // 실제 서버 모드에서는 다른 기기의 접속 정보를 서버에서 받아 옵니다.
+    let poll: ReturnType<typeof setInterval> | undefined;
+    void this.host.ready().then((mode) => {
+      if (mode !== 'remote') return;
+      void this.pull();
+      poll = setInterval(() => void this.pull(), REMOTE_POLL_MS);
+    });
+    inject(DestroyRef).onDestroy(() => clearInterval(poll));
   }
 
   /**
@@ -134,10 +145,49 @@ export class Presence {
   }
 
   private send(message: Message): void {
+    if (this.host.mode() === 'remote') {
+      this.sendRemote(message);
+      return;
+    }
     try {
       this.channel?.postMessage(message);
     } catch {
       // 닫힌 채널에는 보내지 않습니다.
+    }
+  }
+
+  private sendRemote(message: Message): void {
+    if (message.type === 'here') {
+      const { at: _at, ...peer } = message.peer;
+      void fetch('/api/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(peer),
+        keepalive: true,
+      }).catch(() => undefined);
+    } else if (message.type === 'leave') {
+      void fetch(`/api/presence/${encodeURIComponent(message.tabId)}`, {
+        method: 'DELETE',
+        keepalive: true,
+      }).catch(() => undefined);
+    }
+  }
+
+  private async pull(): Promise<void> {
+    try {
+      const response = await fetch('/api/presence', { cache: 'no-store' });
+      if (!response.ok) return;
+      const body = (await response.json()) as { items: unknown[] };
+      const next = new Map<string, Peer>();
+      for (const raw of body.items) {
+        const message = parseMessage({ type: 'here', peer: raw });
+        if (message?.type === 'here' && message.peer.tabId !== this.tabId)
+          next.set(message.peer.tabId, message.peer);
+      }
+      this.peersById.set(next);
+      this.now.set(Date.now());
+    } catch {
+      // 오프라인이면 다음 차례에 다시 받습니다.
     }
   }
 }

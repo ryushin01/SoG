@@ -8,10 +8,11 @@ apps/
 └─ count/        현장 재고 실사 PWA (Angular 22, 주소 /count/)
 packages/
 ├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
-├─ wms-server/   브라우저 안 데모 서버 (IndexedDB, Web Locks, ETag, 멱등 키, 변경 알림)
+├─ wms-server/   업무 서버(규칙, ETag, 멱등 키, 예약). 저장 계층을 갈아 끼움(IndexedDB/Postgres)
+├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Vercel 함수 진입점
 └─ wms-client/   Angular 연결 (HttpClient 인터셉터, 변경 알림, 네트워크 상태, 중복 제출 잠금)
 e2e/             프로덕션 빌드 E2E (Playwright + axe)
-scripts/         배포 구조 조립, 정적 서버
+scripts/         배포 구조 조립, 정적 서버, API 번들, Vercel 배포물
 ```
 
 공유 패키지는 빌드하지 않고 TypeScript 소스를 그대로 씁니다. 앱의 `tsconfig.json` `paths`가 `@sog/*`를 각 패키지의 `src/index.ts`로 연결해, Angular 컴파일러가 앱 코드와 함께 컴파일합니다(데코레이터가 있는 `wms-client`도 마찬가지).
@@ -47,15 +48,17 @@ pnpm dev
 - 백오피스 개발 서버가 `/count/`를 실사 앱 개발 서버(4201)로 넘겨(`apps/backoffice/proxy.conf.json`), 두 앱이 같은 출처에서 데이터를 공유합니다.
 - 실사 앱의 서비스 워커는 프로덕션 빌드에서만 켜집니다. 확인하려면 `pnpm preview`(빌드 후 http://localhost:4300).
 
+개발 서버는 데모 모드(브라우저 안 데모 서버)로 동작합니다. 실제 서버 모드는 `pnpm preview:api`로 확인합니다([실제 서버](backend.md)).
+
 데모 데이터는 백오피스 머리글의 "데모 초기화"로 처음 상태로 되돌립니다. 시드는 고정 난수로 만들어 언제 초기화해도 구성이 같고, 날짜만 초기화 시점을 기준으로 합니다.
 
 ## 테스트
 
 | 명령 | 내용 |
 |---|---|
-| `pnpm test` | 데모 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 탭 간 알림), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
+| `pnpm test` | 업무 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 출고 지시 경쟁·피킹·출고, 탭 간 알림), 실제 서버(PGlite 위에서 트랜잭션 잠금, 변경 피드, 접속 표시), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
 | `pnpm test:storybook` | 모든 스토리를 Chromium에서 렌더링하고 axe 검사(`@storybook/addon-vitest`, `a11y.test: 'error'`) |
-| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데스크톱·모바일에서 업무 흐름, 동시 수정 충돌, 접속 표시, 창고 도면, CSV 내려받기, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
+| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데모 모드(데스크톱·모바일)와 실제 서버 모드(PGlite)에서 출고 지시·피킹, 업무 흐름, 동시 수정 충돌, 접속 표시, 창고 도면, CSV 내려받기, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
 
 컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 같은 DB를 여는 서버를 하나 더 만들면 "다른 탭의 사용자"가 되어 충돌을 재현할 수 있습니다.
 

@@ -1,0 +1,26 @@
+{
+  "name": "@sog/wms-api",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.15",
+    "@sog/domain": "workspace:*",
+    "@sog/wms-server": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

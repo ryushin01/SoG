@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter } from 'rxjs';
+import { WmsHost } from '@/shared/api';
 import { ToastOutlet } from '@/shared/ui';
 import { RemoteChangeNotifier } from '@/features/notify-changes';
 import { ResetDemoButton } from '@/features/reset-demo';
@@ -34,9 +35,11 @@ const NAV = [
 export class Shell {
   protected readonly nav = NAV;
   protected readonly menuOpen = signal(false);
+  protected readonly host = inject(WmsHost);
   private readonly document = inject(DOCUMENT);
 
   constructor() {
+    void this.host.ready();
     let first = true;
     const subscription = inject(Router)
       .events.pipe(filter((event) => event instanceof NavigationEnd))
