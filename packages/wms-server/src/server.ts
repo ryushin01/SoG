@@ -20,6 +20,13 @@ import {
   type CountTask,
   type CountTaskDetail,
   type CountTaskSummary,
+  type CreateOrderRequest,
+  type OrderDetail,
+  type OrderSummary,
+  ORDER_STATUS_LABEL,
+  type PickRequest,
+  type ShipmentOrder,
+  allocate,
   type CreateCountRequest,
   type DashboardKpis,
   type Location,
@@ -113,6 +120,8 @@ interface IdempotencyRecord {
 type Handler = (ctx: Context, params: Record<string, string>) => Promise<ServerResponse>;
 
 const SEED_KEY = 'seed';
+/** 시드 구성이 바뀌면 올립니다. 저장된 시드 버전이 다르면 처음 상태로 다시 채웁니다. */
+const SEED_VERSION = 2;
 
 export async function createWmsServer(options: WmsServerOptions = {}): Promise<WmsServer> {
   const dbName = options.dbName ?? 'sog-wms';
@@ -135,10 +144,12 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     `${prefix}-${now().getTime().toString(36)}${(seq++).toString(36)}${origin.slice(0, 3)}`;
 
   async function ensureSeed(): Promise<void> {
-    if (await db.get('meta', SEED_KEY)) return;
+    const seeded = async () =>
+      (await db.get<{ version?: number }>('meta', SEED_KEY))?.version === SEED_VERSION;
+    if (await seeded()) return;
     await lock(async () => {
       // 다른 탭이 잠금을 먼저 잡고 시드를 넣었을 수 있습니다.
-      if (await db.get('meta', SEED_KEY)) return;
+      if (await seeded()) return;
       await writeSeed();
     });
   }
@@ -149,7 +160,10 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     for (const [store, rows] of Object.entries(seed) as [keyof typeof seed, { id: string }[]][]) {
       for (const row of rows) ops.push({ store, put: row });
     }
-    ops.push({ store: 'meta', put: { id: SEED_KEY, at: now().toISOString() } as { id: string } });
+    ops.push({
+      store: 'meta',
+      put: { id: SEED_KEY, version: SEED_VERSION, at: now().toISOString() } as { id: string },
+    });
     await db.write(ops);
   }
 
@@ -164,6 +178,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     movements: () => db.all<Movement>('movements'),
     counts: () => db.all<CountTask>('counts'),
     lines: () => db.all<CountLine>('countLines'),
+    orders: () => db.all<ShipmentOrder>('orders'),
   };
 
   async function mustGet<T>(
@@ -660,6 +675,55 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         mutate(ctx, `recount:${lineId}`, () => requestRecount(ctx, id!, lineId!)),
     ],
     [
+      'GET',
+      '/api/orders',
+      async (ctx) => {
+        const status = ctx.query.get('status');
+        const assigneeId = ctx.query.get('assigneeId');
+        const [orders, users] = await Promise.all([load.orders(), load.users()]);
+        const items = orders
+          .filter(
+            (order) =>
+              (!status || status.split(',').includes(order.status)) &&
+              (!assigneeId || order.assigneeId === assigneeId),
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .map((order) => orderSummary(order, users));
+        return json(200, { items });
+      },
+    ],
+    [
+      'GET',
+      '/api/orders/:id',
+      async (_ctx, { id }) => {
+        const detail = await orderDetail(id!);
+        return json(200, detail, detail.order.version);
+      },
+    ],
+    [
+      'POST',
+      '/api/orders',
+      (ctx) => mutate(ctx, 'orders', () => createOrder(ctx, ctx.body as CreateOrderRequest)),
+    ],
+    [
+      'PUT',
+      '/api/orders/:id/allocations/:allocationId',
+      (ctx, { id, allocationId }) =>
+        mutate(ctx, `pick:${allocationId}`, () =>
+          pickAllocation(ctx, id!, allocationId!, (ctx.body ?? {}) as PickRequest),
+        ),
+    ],
+    [
+      'POST',
+      '/api/orders/:id/ship',
+      (ctx, { id }) => mutate(ctx, `ship:${id}`, () => shipOrder(ctx, id!)),
+    ],
+    [
+      'POST',
+      '/api/orders/:id/cancel',
+      (ctx, { id }) => mutate(ctx, `cancel-order:${id}`, () => cancelOrder(ctx, id!)),
+    ],
+    [
       'POST',
       '/api/_reset',
       async (ctx) =>
@@ -797,14 +861,373 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     return { overview, items };
   }
 
+  // ---------- 출고 지시 ----------
+  function orderSummary(order: ShipmentOrder, users: User[]): OrderSummary {
+    const allocations = order.lines.flatMap((line) => line.allocations);
+    const { lines: _lines, ...rest } = order; // 요약에는 줄 목록을 넣지 않습니다.
+    return {
+      ...rest,
+      assignee: users.find((user) => user.id === order.assigneeId)!,
+      lineCount: order.lines.length,
+      units: order.lines.reduce((sum, line) => sum + line.qty, 0),
+      pickedUnits: allocations.reduce((sum, a) => sum + (a.pickedQty ?? 0), 0),
+      pickedAllocations: allocations.filter((a) => a.pickedQty !== null).length,
+      allocationCount: allocations.length,
+    };
+  }
+
+  async function orderDetail(id: string): Promise<OrderDetail> {
+    const order = await mustGet<ShipmentOrder>('orders', id, '출고 지시');
+    const [users, skus, locations] = await Promise.all([
+      load.users(),
+      load.skus(),
+      load.locations(),
+    ]);
+    const lines = order.lines.map((line) => {
+      const sku = skus.find((s) => s.id === line.skuId)!;
+      return {
+        id: line.id,
+        qty: line.qty,
+        sku: {
+          id: sku.id,
+          code: sku.code,
+          name: sku.name,
+          barcode: sku.barcode,
+          unit: sku.unit,
+          shape: sku.shape,
+          hue: sku.hue,
+          category: sku.category,
+        },
+        allocations: line.allocations.map((a) => ({
+          ...a,
+          location: locations.find((l) => l.id === a.locationId)!,
+        })),
+      };
+    });
+    const route = lines
+      .flatMap((line) => line.allocations.map((a) => ({ ...a, lineId: line.id, sku: line.sku })))
+      .sort((a, b) => a.location.code.localeCompare(b.location.code));
+    return { order: orderSummary(order, users), lines, route };
+  }
+
+  async function createOrder(ctx: Context, request: CreateOrderRequest): Promise<MutationResult> {
+    if (ctx.user.role !== 'manager')
+      throw new HttpError(409, 'INVALID_STATE', '출고 지시는 관리자만 만들 수 있습니다.');
+    const customer = text(request?.customer, '고객사', 40);
+    const users = await load.users();
+    const assignee = users.find(
+      (user) => user.id === request.assigneeId && user.role === 'operator',
+    );
+    if (!assignee) throw new HttpError(400, 'VALIDATION', '피킹 작업자를 선택해 주세요.');
+    if (!request.dueAt || Number.isNaN(Date.parse(request.dueAt))) {
+      throw new HttpError(400, 'VALIDATION', '출고 마감을 입력해 주세요.');
+    }
+    if (!Array.isArray(request.lines) || request.lines.length === 0) {
+      throw new HttpError(400, 'VALIDATION', '품목을 하나 이상 넣어 주세요.');
+    }
+    if (request.lines.length > 20)
+      throw new HttpError(400, 'VALIDATION', '품목은 20개까지 넣을 수 있습니다.');
+    const ids = request.lines.map((line) => line.skuId);
+    if (new Set(ids).size !== ids.length)
+      throw new HttpError(400, 'VALIDATION', '같은 품목이 두 번 들어 있습니다.');
+
+    const [skus, stocks, orders] = await Promise.all([load.skus(), load.stocks(), load.orders()]);
+    const touched = new Map<string, StockLevel>();
+    const shortages: string[] = [];
+    const at = now().toISOString();
+    const id = newId('so');
+    const lines: ShipmentOrder['lines'] = [];
+    request.lines.forEach((want, index) => {
+      const sku = skus.find((s) => s.id === want.skuId);
+      if (!sku) throw new HttpError(400, 'VALIDATION', '없는 품목이 들어 있습니다.');
+      const qty = positiveInt(want.qty, `${sku.name} 수량`);
+      // 잠금 안에서 최신 재고로 계산하므로, 동시에 만든 다른 출고 지시와 같은 수량을 두 번 잡지 않습니다.
+      const candidates = stocks
+        .filter((stock) => stock.skuId === sku.id)
+        .map((stock) => touched.get(stock.id) ?? stock);
+      const picks = allocate(candidates, qty);
+      if (!picks) {
+        const free = candidates.reduce(
+          (sum, stock) => sum + available(stock.onHand, stock.reserved),
+          0,
+        );
+        shortages.push(`${sku.name}(가용 ${free}${sku.unit}, 요청 ${qty}${sku.unit})`);
+        return;
+      }
+      lines.push({
+        id: `${id}-l${index}`,
+        skuId: sku.id,
+        qty,
+        allocations: picks.map((pick, i) => {
+          touched.set(
+            pick.stock.id,
+            touch({ ...pick.stock, reserved: pick.stock.reserved + pick.qty }, ctx.user),
+          );
+          return {
+            id: `${id}-l${index}-a${i}`,
+            stockId: pick.stock.id,
+            locationId: pick.stock.locationId,
+            qty: pick.qty,
+            pickedQty: null,
+            pickedBy: null,
+            pickedAt: null,
+            note: '',
+          };
+        }),
+      });
+    });
+    if (shortages.length > 0) {
+      throw new HttpError(
+        409,
+        'INSUFFICIENT_STOCK',
+        `가용 재고가 부족합니다: ${shortages.join(', ')}`,
+      );
+    }
+    const yymm = at.slice(2, 4) + at.slice(5, 7);
+    const order: ShipmentOrder = {
+      id,
+      code: `SO-${yymm}-${String(orders.length + 1).padStart(4, '0')}`,
+      customer,
+      status: 'reserved',
+      assigneeId: assignee.id,
+      dueAt: new Date(request.dueAt).toISOString(),
+      createdAt: at,
+      createdBy: ctx.user.id,
+      shippedAt: null,
+      lines,
+      version: 1,
+      updatedAt: at,
+      updatedBy: ctx.user.id,
+    };
+    const ops: WriteOp[] = [
+      { store: 'orders', put: order },
+      ...[...touched.values()].map((stock) => ({ store: 'stocks' as const, put: stock })),
+    ];
+    return {
+      status: 201,
+      body: order,
+      etag: order.version,
+      ops,
+      topics: [
+        'orders',
+        `orders/${id}`,
+        'skus',
+        'dashboard',
+        ...lines.map((line) => `skus/${line.skuId}`),
+      ],
+      activity: [
+        {
+          kind: 'order.created',
+          message: `${ctx.user.name}님이 ${customer} 출고 지시 ${order.code}(${lines.length}품목)를 만들고 재고를 예약했습니다.`,
+          target: `/orders/${id}`,
+        },
+      ],
+    };
+  }
+
+  async function pickAllocation(
+    ctx: Context,
+    orderId: string,
+    allocationId: string,
+    request: PickRequest,
+  ): Promise<MutationResult> {
+    const order = await mustGet<ShipmentOrder>('orders', orderId, '출고 지시');
+    await requireVersion(ctx, order, () => orderDetail(orderId));
+    if (order.status !== 'reserved' && order.status !== 'picking') {
+      throw new HttpError(
+        409,
+        'INVALID_STATE',
+        `${ORDER_STATUS_LABEL[order.status]} 상태라 피킹할 수 없습니다.`,
+        await orderDetail(orderId),
+      );
+    }
+    const line = order.lines.find((l) => l.allocations.some((a) => a.id === allocationId));
+    const allocation = line?.allocations.find((a) => a.id === allocationId);
+    if (!line || !allocation)
+      throw new HttpError(404, 'NOT_FOUND', '피킹 항목을 찾을 수 없습니다.');
+    const pickedQty = positiveInt(request.pickedQty, '집은 수량', true);
+    if (pickedQty > allocation.qty) {
+      throw new HttpError(
+        400,
+        'VALIDATION',
+        `할당된 ${allocation.qty}개보다 많이 집을 수 없습니다.`,
+      );
+    }
+    const note = text(request.note ?? '', '메모', 100, false);
+    if (pickedQty < allocation.qty && !note) {
+      throw new HttpError(400, 'VALIDATION', '덜 집었으면 사유를 적어 주세요.');
+    }
+    const at = now().toISOString();
+    const lines = order.lines.map((l) => ({
+      ...l,
+      allocations: l.allocations.map((a) =>
+        a.id === allocationId ? { ...a, pickedQty, pickedBy: ctx.user.id, pickedAt: at, note } : a,
+      ),
+    }));
+    const done = lines.every((l) => l.allocations.every((a) => a.pickedQty !== null));
+    const next = touch(
+      { ...order, lines, status: done ? ('picked' as const) : ('picking' as const) },
+      ctx.user,
+    );
+    const sku = (await db.get<Sku>('skus', line.skuId))!;
+    return {
+      body: next,
+      etag: next.version,
+      ops: [{ store: 'orders', put: next }],
+      topics: ['orders', `orders/${orderId}`, 'dashboard'],
+      activity: done
+        ? [
+            {
+              kind: 'order.picked',
+              message: `${ctx.user.name}님이 ${order.code} 피킹을 마쳤습니다.`,
+              target: `/orders/${orderId}`,
+            },
+          ]
+        : [
+            {
+              kind: 'order.picked',
+              message: `${ctx.user.name}님이 ${order.code}에서 ${sku.name} ${pickedQty}${sku.unit}을(를) 집었습니다.`,
+              target: `/orders/${orderId}`,
+            },
+          ],
+    };
+  }
+
+  async function shipOrder(ctx: Context, id: string): Promise<MutationResult> {
+    if (ctx.user.role !== 'manager')
+      throw new HttpError(409, 'INVALID_STATE', '출고 확정은 관리자만 할 수 있습니다.');
+    const order = await mustGet<ShipmentOrder>('orders', id, '출고 지시');
+    await requireVersion(ctx, order, () => orderDetail(id));
+    if (order.status !== 'picked') {
+      throw new HttpError(
+        409,
+        'INVALID_STATE',
+        `${ORDER_STATUS_LABEL[order.status]} 상태에서는 출고할 수 없습니다. 피킹을 먼저 마쳐 주세요.`,
+        await orderDetail(id),
+      );
+    }
+    const stocks = await load.stocks();
+    const at = now().toISOString();
+    const changed = new Map<string, StockLevel>();
+    const ops: WriteOp[] = [];
+    for (const line of order.lines) {
+      for (const a of line.allocations) {
+        const stock = changed.get(a.stockId) ?? stocks.find((s) => s.id === a.stockId)!;
+        const picked = a.pickedQty ?? 0;
+        changed.set(
+          a.stockId,
+          touch(
+            {
+              ...stock,
+              onHand: Math.max(0, stock.onHand - picked),
+              reserved: Math.max(0, stock.reserved - a.qty),
+            },
+            ctx.user,
+          ),
+        );
+        if (picked > 0) {
+          ops.push({
+            store: 'movements',
+            put: row<Movement>({
+              id: newId('mv'),
+              type: 'shipment',
+              skuId: line.skuId,
+              fromLocationId: a.locationId,
+              toLocationId: null,
+              qty: picked,
+              delta: 0,
+              reason: `${order.customer} 출고`,
+              ref: order.code,
+              at,
+              by: ctx.user.id,
+            }),
+          });
+        }
+      }
+    }
+    for (const stock of changed.values()) ops.push({ store: 'stocks', put: stock });
+    const next = touch({ ...order, status: 'shipped' as const, shippedAt: at }, ctx.user);
+    ops.push({ store: 'orders', put: next });
+    const short = order.lines
+      .flatMap((l) => l.allocations)
+      .reduce((sum, a) => sum + (a.qty - (a.pickedQty ?? 0)), 0);
+    return {
+      body: next,
+      etag: next.version,
+      ops,
+      topics: [
+        'orders',
+        `orders/${id}`,
+        'skus',
+        'dashboard',
+        ...order.lines.map((l) => `skus/${l.skuId}`),
+      ],
+      activity: [
+        {
+          kind: 'order.shipped',
+          message: `${ctx.user.name}님이 ${order.code}을(를) 출고했습니다.${short > 0 ? ` 덜 집은 ${short}개는 예약을 풀었습니다.` : ''}`,
+          target: `/orders/${id}`,
+        },
+      ],
+    };
+  }
+
+  async function cancelOrder(ctx: Context, id: string): Promise<MutationResult> {
+    if (ctx.user.role !== 'manager')
+      throw new HttpError(409, 'INVALID_STATE', '관리자만 취소할 수 있습니다.');
+    const order = await mustGet<ShipmentOrder>('orders', id, '출고 지시');
+    await requireVersion(ctx, order, () => orderDetail(id));
+    if (order.status === 'shipped' || order.status === 'cancelled') {
+      throw new HttpError(
+        409,
+        'INVALID_STATE',
+        `${ORDER_STATUS_LABEL[order.status]} 상태라 취소할 수 없습니다.`,
+        await orderDetail(id),
+      );
+    }
+    const stocks = await load.stocks();
+    const changed = new Map<string, StockLevel>();
+    for (const a of order.lines.flatMap((l) => l.allocations)) {
+      const stock = changed.get(a.stockId) ?? stocks.find((s) => s.id === a.stockId)!;
+      changed.set(
+        a.stockId,
+        touch({ ...stock, reserved: Math.max(0, stock.reserved - a.qty) }, ctx.user),
+      );
+    }
+    const next = touch({ ...order, status: 'cancelled' as const }, ctx.user);
+    return {
+      body: next,
+      etag: next.version,
+      ops: [
+        { store: 'orders', put: next },
+        ...[...changed.values()].map((stock) => ({ store: 'stocks' as const, put: stock })),
+      ],
+      topics: [
+        'orders',
+        `orders/${id}`,
+        'skus',
+        'dashboard',
+        ...order.lines.map((l) => `skus/${l.skuId}`),
+      ],
+      activity: [
+        {
+          kind: 'order.cancelled',
+          message: `${ctx.user.name}님이 ${order.code}을(를) 취소하고 예약을 풀었습니다.`,
+          target: `/orders/${id}`,
+        },
+      ],
+    };
+  }
+
   async function dashboard(): Promise<DashboardKpis> {
-    const [skus, stocks, movements, counts, lines, locations] = await Promise.all([
+    const [skus, stocks, movements, counts, lines, locations, orders] = await Promise.all([
       load.skus(),
       load.stocks(),
       load.movements(),
       load.counts(),
       load.lines(),
       load.locations(),
+      load.orders(),
     ]);
     const summaries = skus.map((sku) => summarize(sku, stocks));
     const costOf = new Map(skus.map((sku) => [sku.id, sku.unitCost]));
@@ -841,6 +1264,9 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       openCounts: counts.filter((task) => task.status === 'open' || task.status === 'in_progress')
         .length,
       pendingReview: counts.filter((task) => task.status === 'submitted').length,
+      pendingOrders: orders.filter((order) =>
+        ['reserved', 'picking', 'picked'].includes(order.status),
+      ).length,
       accuracy: lastApproved
         ? accuracyRate(lines.filter((line) => line.taskId === lastApproved.id))
         : null,

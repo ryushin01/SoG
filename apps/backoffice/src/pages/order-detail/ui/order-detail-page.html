@@ -1,0 +1,120 @@
+@if (data(); as d) {
+  <nav class="crumbs" aria-label="현재 위치">
+    <ol>
+      <li><a routerLink="/orders">출고 지시</a></li>
+      <li aria-current="page">{{ d.order.code }}</li>
+    </ol>
+  </nav>
+
+  <sog-page-header index="03" [label]="d.order.code" [heading]="d.order.customer">
+    <sog-order-actions [order]="d.order" (changed)="detail.reload()" />
+  </sog-page-header>
+
+  <sog-presence-notice [resource]="'orders/' + d.order.id" />
+
+  <dl class="meta">
+    <div>
+      <dt>상태</dt>
+      <dd><sog-order-status-badge [status]="d.order.status" /></dd>
+    </div>
+    <div>
+      <dt>피킹 작업자</dt>
+      <dd>
+        {{ d.order.assignee.name }} <span class="muted">{{ d.order.assignee.team }}</span>
+      </dd>
+    </div>
+    <div>
+      <dt>출고 마감</dt>
+      <dd>{{ d.order.dueAt | dateTime }}</dd>
+    </div>
+    <div>
+      <dt>수량</dt>
+      <dd>{{ d.order.pickedUnits | num }} / {{ d.order.units | num }}개 집음</dd>
+    </div>
+    <div>
+      <dt>피킹</dt>
+      <dd>
+        <sog-count-progress
+          [counted]="d.order.pickedAllocations"
+          [total]="d.order.allocationCount"
+          name="피킹 진행률"
+        />
+      </dd>
+    </div>
+    <div>
+      <dt>만든 사람</dt>
+      <dd>{{ d.order.createdBy | userName }} · {{ d.order.createdAt | ago }}</dd>
+    </div>
+  </dl>
+
+  @if (d.order.status === 'reserved' || d.order.status === 'picking') {
+    <p class="live" role="status">
+      <span class="live__dot" aria-hidden="true"></span>
+      {{ d.order.assignee.name }}님이 현장 앱에서 집는 대로 이 표가 바뀝니다.
+    </p>
+  }
+
+  <section aria-labelledby="route-title">
+    <h2 id="route-title" class="section-title">피킹 동선</h2>
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-labelledby="route-title"
+      [class.stale]="detail.isLoading()"
+    >
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">로케이션</th>
+            <th scope="col">품목</th>
+            <th scope="col" class="num">예약</th>
+            <th scope="col" class="num">집음</th>
+            <th scope="col">메모</th>
+            <th scope="col">집은 사람</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of d.route; track a.id) {
+            <tr>
+              <th scope="row" class="mono">{{ a.location.code }}</th>
+              <td>
+                <a class="item" [routerLink]="['/inventory', a.sku.id]">{{ a.sku.name }}</a>
+                <p class="mono muted">{{ a.sku.code }}</p>
+              </td>
+              <td class="num">{{ a.qty | num }}</td>
+              <td class="num">
+                @if (a.pickedQty === null) {
+                  <span class="muted">대기</span>
+                } @else {
+                  <span [class.short]="a.pickedQty < a.qty"
+                    >{{ a.pickedQty | num }}
+                    @if (a.pickedQty < a.qty) {
+                      <span> (−{{ a.qty - a.pickedQty }})</span>
+                    }
+                  </span>
+                }
+              </td>
+              <td>{{ a.note || '—' }}</td>
+              <td class="nowrap">
+                @if (a.pickedAt) {
+                  {{ a.pickedBy | userName }} <span class="muted">· {{ a.pickedAt | ago }}</span>
+                } @else {
+                  —
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+} @else if (detail.error()) {
+  <sog-state-message
+    kind="error"
+    message="출고 지시를 불러오지 못했습니다."
+    (retry)="detail.reload()"
+  />
+} @else {
+  <sog-state-message message="출고 지시를 불러오는 중입니다." />
+}

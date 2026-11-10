@@ -51,6 +51,13 @@ import { UnsavedWork } from '@/shared/lib';
         >
         <a
           class="tab"
+          routerLink="/picks"
+          [class.tab--on]="section() === 'picks'"
+          [attr.aria-current]="section() === 'picks' ? 'page' : null"
+          >피킹</a
+        >
+        <a
+          class="tab"
           routerLink="/settings"
           [class.tab--on]="section() === 'settings'"
           [attr.aria-current]="section() === 'settings' ? 'page' : null"
@@ -125,7 +132,7 @@ import { UnsavedWork } from '@/shared/lib';
       bottom: 0;
       z-index: 10;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       padding-bottom: env(safe-area-inset-bottom);
       border-top: 1px solid var(--ink);
       background: var(--paper);
@@ -154,7 +161,7 @@ export class AppFrame {
   protected readonly session = inject(OperatorSession);
   private readonly document = inject(DOCUMENT);
   /** 아래쪽 탭의 현재 구역. 작업 목록·작업·품목 화면은 모두 실사 작업 탭입니다. */
-  protected readonly section = signal<'tasks' | 'settings' | null>(null);
+  protected readonly section = signal<'tasks' | 'picks' | 'settings' | null>(null);
   /** 서비스 워커가 새 버전을 받아 두었는지 */
   protected readonly updateReady = signal(false);
   private readonly updates = inject(SwUpdate);
@@ -167,7 +174,13 @@ export class AppFrame {
       .subscribe((event) => {
         const url = event.urlAfterRedirects;
         this.section.set(
-          url.startsWith('/settings') ? 'settings' : url.startsWith('/start') ? null : 'tasks',
+          url.startsWith('/settings')
+            ? 'settings'
+            : url.startsWith('/picks')
+              ? 'picks'
+              : url.startsWith('/start')
+                ? null
+                : 'tasks',
         );
         if (first) {
           first = false;

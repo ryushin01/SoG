@@ -1,5 +1,12 @@
 /** 화면과 서버가 같은 답을 내야 하는 재고 규칙 */
-import type { CountLine, CountTaskStatus, MovementType, SkuCategory, ZoneCode } from './types';
+import type {
+  CountLine,
+  CountTaskStatus,
+  MovementType,
+  OrderStatus,
+  SkuCategory,
+  ZoneCode,
+} from './types';
 
 export type StockStatus = 'ok' | 'low' | 'out';
 
@@ -95,6 +102,37 @@ export const COUNT_STATUS_LABEL: Record<CountTaskStatus, string> = {
   approved: '승인',
   cancelled: '취소',
 };
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  reserved: '피킹 대기',
+  picking: '피킹 중',
+  picked: '출고 대기',
+  shipped: '출고 완료',
+  cancelled: '취소',
+};
+
+/**
+ * 가용 재고에서 수량을 예약할 로케이션을 고릅니다. 가용 재고가 많은 곳부터 채워 피킹할 곳 수를 줄입니다.
+ * 모자라면 null을 돌려줍니다.
+ */
+export function allocate<T extends { id: string; onHand: number; reserved: number }>(
+  stocks: T[],
+  qty: number,
+): { stock: T; qty: number }[] | null {
+  const sorted = [...stocks]
+    .map((stock) => ({ stock, free: available(stock.onHand, stock.reserved) }))
+    .filter((item) => item.free > 0)
+    .sort((a, b) => b.free - a.free || a.stock.id.localeCompare(b.stock.id));
+  const picks: { stock: T; qty: number }[] = [];
+  let left = qty;
+  for (const { stock, free } of sorted) {
+    if (left <= 0) break;
+    const take = Math.min(free, left);
+    picks.push({ stock, qty: take });
+    left -= take;
+  }
+  return left > 0 ? null : picks;
+}
 
 export const ZONE_LABEL: Record<ZoneCode, string> = {
   A: 'A 상온 랙',

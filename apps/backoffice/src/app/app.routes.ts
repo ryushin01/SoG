@@ -27,6 +27,16 @@ export const routes: Routes = [
     loadComponent: () => import('@/pages/count-detail').then((m) => m.CountDetailPage),
   },
   {
+    path: 'orders',
+    title: '출고 지시',
+    loadComponent: () => import('@/pages/orders').then((m) => m.OrdersPage),
+  },
+  {
+    path: 'orders/:orderId',
+    title: '출고 지시',
+    loadComponent: () => import('@/pages/order-detail').then((m) => m.OrderDetailPage),
+  },
+  {
     path: 'map',
     title: '창고 도면',
     loadComponent: () => import('@/pages/warehouse-map').then((m) => m.WarehouseMapPage),

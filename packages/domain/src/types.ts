@@ -144,6 +144,10 @@ export type ActivityKind =
   | 'count.submitted'
   | 'count.approved'
   | 'count.cancelled'
+  | 'order.created'
+  | 'order.picked'
+  | 'order.shipped'
+  | 'order.cancelled'
   | 'conflict';
 
 export interface Activity {
@@ -154,4 +158,42 @@ export interface Activity {
   by: string;
   /** 관련 자원(품목·실사 작업)의 경로. 화면에서 링크로 씁니다. */
   target: string | null;
+}
+
+export type OrderStatus = 'reserved' | 'picking' | 'picked' | 'shipped' | 'cancelled';
+
+/** 출고 지시 한 줄의 로케이션별 할당. 할당 수량만큼 재고의 reserved가 늘어납니다. */
+export interface Allocation {
+  id: string;
+  stockId: string;
+  locationId: string;
+  qty: number;
+  /** 집은 수량. 아직 확인하지 않았으면 null */
+  pickedQty: number | null;
+  pickedBy: string | null;
+  pickedAt: ISODateString | null;
+  /** 덜 집었을 때의 사유 */
+  note: string;
+}
+
+export interface OrderLine {
+  id: string;
+  skuId: string;
+  qty: number;
+  allocations: Allocation[];
+}
+
+/** 출고 지시. 만들 때 가용 재고를 예약(할당)하고, 피킹 뒤 출고를 확정하면 재고가 줄어듭니다. */
+export interface ShipmentOrder extends Versioned {
+  id: string;
+  /** 예: SO-2611-0007 */
+  code: string;
+  customer: string;
+  status: OrderStatus;
+  assigneeId: string;
+  dueAt: ISODateString;
+  createdAt: ISODateString;
+  createdBy: string;
+  shippedAt: ISODateString | null;
+  lines: OrderLine[];
 }

@@ -9,9 +9,13 @@ export const STORES = [
   'movements',
   'counts',
   'countLines',
+  'orders',
   'activity',
   'idempotency',
 ] as const;
+
+/** 저장소를 추가하면 올립니다. 올라가면 없는 저장소를 만들고, 서버가 시드 버전을 보고 다시 채웁니다. */
+export const DB_VERSION = 2;
 
 export type StoreName = (typeof STORES)[number];
 
@@ -32,7 +36,7 @@ export class Database {
 
   static open(name: string): Promise<Database> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(name, 1);
+      const request = indexedDB.open(name, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
         for (const store of STORES) {
