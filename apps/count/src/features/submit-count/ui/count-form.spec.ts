@@ -2,7 +2,7 @@ import type { CountLineView } from '@sog/domain';
 import { render, screen } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
 import { NetworkState, provideWmsClient } from '@/shared/api';
-import { LOCAL_DB_NAME } from '@/shared/lib';
+import { LOCAL_DB_NAME, UnsavedWork } from '@/shared/lib';
 import { Outbox } from '@/entities/outbox';
 import { CountForm } from './count-form';
 
@@ -40,7 +40,11 @@ async function setup(blind: boolean) {
   });
   // 서버로 보내지 않고 보낼함에 쌓이는 것만 봅니다.
   view.fixture.debugElement.injector.get(NetworkState).simulatedOffline.set(true);
-  return { saved, outbox: view.fixture.debugElement.injector.get(Outbox) };
+  return {
+    saved,
+    outbox: view.fixture.debugElement.injector.get(Outbox),
+    unsaved: view.fixture.debugElement.injector.get(UnsavedWork),
+  };
 }
 
 describe('CountForm', () => {
@@ -63,5 +67,15 @@ describe('CountForm', () => {
     await vi.waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
     expect(outbox.items()).toHaveLength(1);
     expect(outbox.items()[0]!.countedQty).toBe(10);
+  });
+
+  it('수량을 바꾸면 저장하지 않은 입력으로 표시하고, 저장하면 해제한다', async () => {
+    const { unsaved, saved } = await setup(false);
+    expect(unsaved.dirty()).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: '1 더하기' }));
+    expect(unsaved.dirty()).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: /저장하고 다음/ }));
+    await vi.waitFor(() => expect(saved).toHaveBeenCalled());
+    expect(unsaved.dirty()).toBe(false);
   });
 });

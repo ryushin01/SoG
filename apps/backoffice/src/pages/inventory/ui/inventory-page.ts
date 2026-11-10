@@ -165,7 +165,7 @@ export class InventoryPage {
           const result = await firstValueFrom(
             this.http.get<Page<SkuSummary>>('/api/skus', {
               params: {
-                q: this.qFilter(),
+                q: this.qDebounced.value() ?? '',
                 status: this.statusFilter(),
                 category: this.categoryFilter(),
                 zone: this.zoneFilter(),

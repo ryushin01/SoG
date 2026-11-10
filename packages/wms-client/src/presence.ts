@@ -53,7 +53,7 @@ export class Presence {
   private mine: Omit<Peer, 'tabId' | 'userId' | 'app' | 'at'> | null = null;
 
   constructor() {
-    this.channel?.addEventListener('message', (event: MessageEvent<Message>) =>
+    this.channel?.addEventListener('message', (event: MessageEvent<unknown>) =>
       this.receive(event.data),
     );
     const timer = setInterval(() => {
@@ -117,7 +117,10 @@ export class Presence {
     });
   }
 
-  private receive(message: Message): void {
+  private receive(raw: unknown): void {
+    // 같은 출처의 어떤 코드든 이 채널에 보낼 수 있으므로 모양을 확인한 뒤 씁니다.
+    const message = parseMessage(raw);
+    if (!message) return;
     if (message.type === 'ping') {
       this.announce();
       return;
@@ -137,4 +140,36 @@ export class Presence {
       // 닫힌 채널에는 보내지 않습니다.
     }
   }
+}
+
+function parseMessage(raw: unknown): Message | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  if (value['type'] === 'ping') return { type: 'ping' };
+  if (value['type'] === 'leave' && typeof value['tabId'] === 'string') {
+    return { type: 'leave', tabId: value['tabId'] };
+  }
+  const peer = value['peer'] as Record<string, unknown> | undefined;
+  if (
+    value['type'] === 'here' &&
+    peer &&
+    typeof peer === 'object' &&
+    typeof peer['tabId'] === 'string' &&
+    typeof peer['userId'] === 'string' &&
+    typeof peer['resource'] === 'string'
+  ) {
+    return {
+      type: 'here',
+      peer: {
+        tabId: peer['tabId'],
+        userId: peer['userId'],
+        resource: peer['resource'],
+        app: typeof peer['app'] === 'string' ? peer['app'] : '',
+        editing: peer['editing'] === true,
+        detail: typeof peer['detail'] === 'string' ? peer['detail'].slice(0, 120) : '',
+        at: Date.now(),
+      },
+    };
+  }
+  return null;
 }

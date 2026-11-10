@@ -131,6 +131,13 @@
             <li class="muted">비어 있는 로케이션입니다. 입고하면 여기에 품목이 보입니다.</li>
           }
         </ul>
+      } @else if (selectedId() && detail.error()) {
+        <h2 id="loc-title" class="side__title">로케이션을 찾을 수 없습니다</h2>
+        <sog-state-message
+          kind="error"
+          message="없는 로케이션이거나 불러오지 못했습니다. 도면에서 다시 골라 주세요."
+          (retry)="detail.reload()"
+        />
       } @else if (selectedId() && detail.isLoading()) {
         <h2 id="loc-title" class="visually-hidden">로케이션 상세</h2>
         <sog-state-message message="로케이션을 불러오는 중입니다." />

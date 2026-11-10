@@ -5,6 +5,7 @@ import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs';
 import { OperatorSession } from '@/entities/operator';
 import { SyncStatus } from '@/features/sync-outbox';
+import { UnsavedWork } from '@/shared/lib';
 
 /** 현장 앱 틀: 본문 바로가기, 위쪽 상태 막대, 엄지로 닿는 아래쪽 탭 */
 @Component({
@@ -27,7 +28,12 @@ import { SyncStatus } from '@/features/sync-outbox';
     </header>
     @if (updateReady()) {
       <div class="update" role="status">
-        <p>새 버전이 준비되었습니다. 기기에 저장한 실사 기록은 그대로 남습니다.</p>
+        <p>
+          새 버전이 준비되었습니다. 저장한 실사 기록은 그대로 남습니다.
+          @if (unsaved.dirty()) {
+            입력 중인 수량은 먼저 저장해 주세요.
+          }
+        </p>
         <button type="button" class="btn btn--solid" (click)="reload()">새로 고침</button>
       </div>
     }
@@ -152,6 +158,7 @@ export class AppFrame {
   /** 서비스 워커가 새 버전을 받아 두었는지 */
   protected readonly updateReady = signal(false);
   private readonly updates = inject(SwUpdate);
+  protected readonly unsaved = inject(UnsavedWork);
 
   constructor() {
     let first = true;
@@ -189,6 +196,15 @@ export class AppFrame {
 
   /** 새 버전으로 바꾸고 다시 엽니다. 보낼함은 IndexedDB에 있어 사라지지 않습니다. */
   protected async reload(): Promise<void> {
+    // 수량을 입력하고 아직 저장하지 않았으면 먼저 확인합니다. 저장한 기록은 보낼함에 남아 안전합니다.
+    if (
+      this.unsaved.dirty() &&
+      !this.document.defaultView?.confirm(
+        '저장하지 않은 수량이 있습니다. 새로 고치면 지워집니다. 계속할까요?',
+      )
+    ) {
+      return;
+    }
     await this.updates.activateUpdate().catch(() => false);
     this.document.location.reload();
   }

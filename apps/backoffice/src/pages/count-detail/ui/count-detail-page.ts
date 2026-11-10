@@ -21,9 +21,9 @@ import {
   variance,
   ZONE_LABEL,
 } from '@sog/domain';
-import { Presence, WmsHost } from '@/shared/api';
+import { Presence, SubmitLock, toApiError, WmsHost } from '@/shared/api';
 import { AgoPipe, DatePipe, DeltaPipe, downloadCsv, NumPipe, WonPipe } from '@/shared/lib';
-import { PageHeader, StateMessage } from '@/shared/ui';
+import { PageHeader, StateMessage, Toaster } from '@/shared/ui';
 import { CountProgress, CountStatusBadge } from '@/entities/count';
 import { Session, UserNamePipe } from '@/entities/user';
 import { RecountButton, ReviewActions } from '@/features/review-count';
@@ -58,6 +58,8 @@ export class CountDetailPage {
   private readonly host = inject(WmsHost);
   private readonly session = inject(Session);
   private readonly http = inject(HttpClient);
+  private readonly toaster = inject(Toaster);
+  protected readonly exportLock = new SubmitLock();
   protected readonly zoneLabel = ZONE_LABEL;
 
   protected readonly detail = httpResource<CountTaskDetail>(() => `/api/counts/${this.taskId()}`);
@@ -153,7 +155,17 @@ export class CountDetailPage {
   }
 
   /** 실사 차이 보고서: 장부·실사·차이·차이 금액·승인 시 재고를 항목마다 */
-  protected async exportCsv(): Promise<void> {
+  protected exportCsv(): void {
+    void this.exportLock.run(async () => {
+      try {
+        await this.writeCsv();
+      } catch (error) {
+        this.toaster.show(toApiError(error).message, 'error');
+      }
+    });
+  }
+
+  private async writeCsv(): Promise<void> {
     const data = this.data();
     if (!data) return;
     // 사용자 목록을 아직 못 받았으면 먼저 받아, 센 사람 칸에 ID 대신 이름이 들어가게 합니다.

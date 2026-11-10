@@ -3,6 +3,8 @@ import {
   Component,
   type OnInit,
   computed,
+  DestroyRef,
+  effect,
   inject,
   input,
   output,
@@ -11,6 +13,7 @@ import {
 import { form, FormField, max, maxLength, min, required, submit } from '@angular/forms/signals';
 import type { CountLineView } from '@sog/domain';
 import { NetworkState, SubmitLock } from '@/shared/api';
+import { UnsavedWork } from '@/shared/lib';
 import { Outbox } from '@/entities/outbox';
 
 /**
@@ -48,12 +51,30 @@ export class CountForm implements OnInit {
     () => !this.blind() && this.model().qty !== this.line().expectedQty,
   );
 
+  private readonly unsaved = inject(UnsavedWork);
+  /** 처음 채운 값. 이 값과 다르면 저장하지 않은 입력이 있는 것으로 봅니다. */
+  private readonly start = signal<{ qty: number; note: string } | null>(null);
+  private committed = false;
+
+  constructor() {
+    effect(() => {
+      const start = this.start();
+      const { qty, note } = this.model();
+      this.unsaved.dirty.set(
+        !this.committed && start !== null && (Number(qty) !== start.qty || note !== start.note),
+      );
+    });
+    inject(DestroyRef).onDestroy(() => this.unsaved.dirty.set(false));
+  }
+
   ngOnInit(): void {
     const line = this.line();
-    this.model.set({
+    const value = {
       qty: this.initial() ?? line.countedQty ?? (this.blind() ? 0 : line.expectedQty),
       note: line.note ?? '',
-    });
+    };
+    this.model.set(value);
+    this.start.set(value);
   }
 
   protected step(delta: number): void {
@@ -78,6 +99,8 @@ export class CountForm implements OnInit {
           countedQty: Number(qty),
           note: note.trim(),
         });
+        this.committed = true;
+        this.unsaved.dirty.set(false);
         this.saved.emit(Number(qty));
         return undefined;
       });

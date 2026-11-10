@@ -7,7 +7,9 @@
   </nav>
 
   <sog-page-header index="02" [label]="d.task.code" [heading]="d.task.title">
-    <button type="button" class="btn" (click)="void exportCsv()">차이 보고서 CSV</button>
+    <button type="button" class="btn" [disabled]="exportLock.pending()" (click)="exportCsv()">
+      {{ exportLock.pending() ? '내보내는 중…' : '차이 보고서 CSV' }}
+    </button>
     <sog-review-actions [task]="d.task" (changed)="detail.reload()" />
   </sog-page-header>
 

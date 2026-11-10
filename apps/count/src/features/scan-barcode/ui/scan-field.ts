@@ -136,6 +136,8 @@ export class ScanField {
   private readonly video = viewChild<ElementRef<HTMLVideoElement>>('video');
   private stream: MediaStream | null = null;
   private frame = 0;
+  /** 카메라를 켤 때마다 올리는 번호. 켜는 도중에 닫히면 늦게 받은 카메라를 바로 끕니다. */
+  private session = 0;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.stopCamera());
@@ -153,13 +155,24 @@ export class ScanField {
     if (!Detector || !dialog || !video) return;
     this.cameraMessage.set('카메라를 켜는 중입니다.');
     dialog.showModal();
+    const session = ++this.session;
+    const stale = () => session !== this.session || !dialog.open;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
         audio: false,
       });
-      video.srcObject = this.stream;
+      if (stale()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = stream;
+      video.srcObject = stream;
       await video.play();
+      if (stale()) {
+        this.stopCamera();
+        return;
+      }
       this.cameraMessage.set('바코드를 화면 가운데에 맞춰 주세요.');
       const detector = new Detector({ formats: ['ean_13', 'code_128', 'qr_code'] });
       const scan = async () => {
@@ -175,6 +188,7 @@ export class ScanField {
       };
       void scan();
     } catch {
+      if (stale()) return;
       this.stopCamera();
       this.cameraMessage.set(
         '카메라를 쓸 수 없습니다. 권한을 확인하거나 숫자를 직접 입력해 주세요.',
@@ -189,6 +203,7 @@ export class ScanField {
   }
 
   protected stopCamera(): void {
+    this.session++;
     cancelAnimationFrame(this.frame);
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;

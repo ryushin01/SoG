@@ -83,4 +83,25 @@ describe('Presence', () => {
     await wait();
     expect(peers()).toEqual([]);
   });
+
+  it('모양이 잘못된 메시지는 무시한다', async () => {
+    const presence = TestBed.inject(Presence);
+    const peers = TestBed.runInInjectionContext(() => presence.peers(() => 'skus/sku-1'));
+    const other = otherTab();
+    other.channel.postMessage({ type: 'here' });
+    other.channel.postMessage({ type: 'here', peer: { tabId: 1, resource: null } });
+    other.channel.postMessage('hello');
+    other.channel.postMessage({
+      type: 'here',
+      peer: {
+        tabId: 't3',
+        userId: 'u-kim',
+        app: '백오피스',
+        resource: 'skus/sku-1',
+        editing: 'yes',
+      },
+    });
+    await wait();
+    expect(peers().map((p) => [p.tabId, p.editing])).toEqual([['t3', false]]);
+  });
 });
