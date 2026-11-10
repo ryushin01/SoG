@@ -66,7 +66,7 @@ export class WarehouseMapPage {
   });
   protected readonly selectedId = linkedSignal(() => this.loc() ?? '');
   protected readonly detail = httpResource<LocationDetail>(() =>
-    this.selectedId() ? `/api/locations/${this.selectedId()}` : undefined,
+    this.selectedId() ? `/api/locations/${encodeURIComponent(this.selectedId())}` : undefined,
   );
 
   protected readonly maxUnits = computed(() =>

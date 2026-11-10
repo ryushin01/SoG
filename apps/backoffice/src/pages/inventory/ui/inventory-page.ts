@@ -161,19 +161,19 @@ export class InventoryPage {
     void this.exportLock.run(async () => {
       try {
         const rows: SkuSummary[] = [];
+        // 시작할 때의 필터를 한 번만 읽어, 내보내는 도중 필터를 바꿔도 두 조건의 행이 섞이지 않게 합니다.
+        const query = {
+          q: this.qDebounced.value() ?? '',
+          status: this.statusFilter(),
+          category: this.categoryFilter(),
+          zone: this.zoneFilter(),
+          sort: this.sort(),
+          dir: this.dir(),
+        };
         for (let page = 1; ; page++) {
           const result = await firstValueFrom(
             this.http.get<Page<SkuSummary>>('/api/skus', {
-              params: {
-                q: this.qDebounced.value() ?? '',
-                status: this.statusFilter(),
-                category: this.categoryFilter(),
-                zone: this.zoneFilter(),
-                sort: this.sort(),
-                dir: this.dir(),
-                page,
-                size: 100,
-              },
+              params: { ...query, page, size: 100 },
             }),
           );
           rows.push(...result.items);

@@ -10,7 +10,16 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { form, FormField, max, maxLength, min, required, submit } from '@angular/forms/signals';
+import {
+  disabled,
+  form,
+  FormField,
+  max,
+  maxLength,
+  min,
+  required,
+  submit,
+} from '@angular/forms/signals';
 import type { CountLineView } from '@sog/domain';
 import { NetworkState, SubmitLock } from '@/shared/api';
 import { UnsavedWork } from '@/shared/lib';
@@ -42,6 +51,9 @@ export class CountForm implements OnInit {
 
   protected readonly model = signal({ qty: 0, note: '' });
   protected readonly form = form(this.model, (path) => {
+    // 저장하는 동안에는 입력을 잠가, 보낼함에 들어간 값과 화면 값이 어긋나지 않게 합니다.
+    disabled(path.qty, () => this.lock.pending());
+    disabled(path.note, () => this.lock.pending());
     required(path.qty, { message: '수량을 입력해 주세요.' });
     min(path.qty, 0, { message: '0 이상으로 입력해 주세요.' });
     max(path.qty, 999_999, { message: '수량이 너무 큽니다.' });

@@ -195,7 +195,7 @@ export class AppFrame {
   }
 
   /** 새 버전으로 바꾸고 다시 엽니다. 보낼함은 IndexedDB에 있어 사라지지 않습니다. */
-  protected async reload(): Promise<void> {
+  protected reload(): void {
     // 수량을 입력하고 아직 저장하지 않았으면 먼저 확인합니다. 저장한 기록은 보낼함에 남아 안전합니다.
     if (
       this.unsaved.dirty() &&
@@ -205,7 +205,7 @@ export class AppFrame {
     ) {
       return;
     }
-    await this.updates.activateUpdate().catch(() => false);
+    // VERSION_READY 뒤에는 다시 열기만 해도 새 버전이 적용됩니다. 기다리는 틈에 입력이 생기지 않게 바로 엽니다.
     this.document.location.reload();
   }
 }
