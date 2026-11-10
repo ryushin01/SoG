@@ -48,12 +48,15 @@ export class CountForm implements OnInit {
   protected readonly network = inject(NetworkState);
   /** 저장하면 다음 품목으로 넘어가므로, 성공한 뒤에는 잠금을 풀지 않습니다. */
   protected readonly lock = new SubmitLock({ keepLockedOnSuccess: true });
+  /** 검증을 통과해 보낼함에 넣는 중 */
+  protected readonly saving = signal(false);
 
   protected readonly model = signal({ qty: 0, note: '' });
   protected readonly form = form(this.model, (path) => {
-    // 저장하는 동안에는 입력을 잠가, 보낼함에 들어간 값과 화면 값이 어긋나지 않게 합니다.
-    disabled(path.qty, () => this.lock.pending());
-    disabled(path.note, () => this.lock.pending());
+    // 검증을 통과해 저장하는 동안에만 입력을 잠가, 보낼함에 들어간 값과 화면 값이 어긋나지 않게 합니다.
+    // (잠긴 필드는 검증에서 빠지므로 검증 전에는 잠그지 않습니다.)
+    disabled(path.qty, () => this.saving());
+    disabled(path.note, () => this.saving());
     required(path.qty, { message: '수량을 입력해 주세요.' });
     min(path.qty, 0, { message: '0 이상으로 입력해 주세요.' });
     max(path.qty, 999_999, { message: '수량이 너무 큽니다.' });
@@ -67,16 +70,21 @@ export class CountForm implements OnInit {
   /** 처음 채운 값. 이 값과 다르면 저장하지 않은 입력이 있는 것으로 봅니다. */
   private readonly start = signal<{ qty: number; note: string } | null>(null);
   private committed = false;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
       const start = this.start();
       const { qty, note } = this.model();
-      this.unsaved.dirty.set(
+      this.unsaved.mark(
+        this,
         !this.committed && start !== null && (Number(qty) !== start.qty || note !== start.note),
       );
     });
-    inject(DestroyRef).onDestroy(() => this.unsaved.dirty.set(false));
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.unsaved.mark(this, false);
+    });
   }
 
   ngOnInit(): void {
@@ -102,6 +110,7 @@ export class CountForm implements OnInit {
       const ok = await submit(this.form, async () => {
         const line = this.line();
         const { qty, note } = this.model();
+        this.saving.set(true);
         await this.outbox.enqueue({
           taskId: line.taskId,
           lineId: line.id,
@@ -112,12 +121,16 @@ export class CountForm implements OnInit {
           note: note.trim(),
         });
         this.committed = true;
-        this.unsaved.dirty.set(false);
-        this.saved.emit(Number(qty));
+        this.unsaved.mark(this, false);
+        // 저장하는 사이 다른 품목으로 넘어갔으면 이 폼의 결과로 화면을 움직이지 않습니다.
+        if (!this.destroyed) this.saved.emit(Number(qty));
         return undefined;
-      });
+      }).catch(() => false);
       // 입력이 잘못되었거나 저장에 실패하면 다시 누를 수 있게 풉니다.
-      if (!ok) this.lock.release();
+      if (!ok) {
+        this.saving.set(false);
+        this.lock.release();
+      }
     });
   }
 }

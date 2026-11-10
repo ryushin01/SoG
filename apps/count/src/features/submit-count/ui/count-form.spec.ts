@@ -78,4 +78,17 @@ describe('CountForm', () => {
     await vi.waitFor(() => expect(saved).toHaveBeenCalled());
     expect(unsaved.dirty()).toBe(false);
   });
+
+  it('잘못된 수량은 보낼함에 넣지 않고 오류를 보여 준다', async () => {
+    const { saved, outbox } = await setup(false);
+    const qty = screen.getByLabelText(/센 수량/);
+    await userEvent.clear(qty);
+    await userEvent.type(qty, '-1');
+    await userEvent.click(screen.getByRole('button', { name: /저장하고 다음/ }));
+    expect(await screen.findByText('0 이상으로 입력해 주세요.')).toBeTruthy();
+    expect(saved).not.toHaveBeenCalled();
+    expect(outbox.items()).toHaveLength(0);
+    // 다시 고칠 수 있게 입력이 잠기지 않아야 합니다.
+    expect((qty as HTMLInputElement).disabled).toBe(false);
+  });
 });
