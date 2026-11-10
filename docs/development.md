@@ -27,6 +27,7 @@ scripts/         배포 구조 조립, 정적 서버
 | 폼 | Signal Forms(`@angular/forms/signals`의 `form`, `[formField]`, `submit`) |
 | 제어 흐름 | `@if`·`@for`·`@switch`·`@let`, `*ngIf` 없음(ESLint `prefer-control-flow`) |
 | `@defer` | 대시보드 차트(`on viewport`), 활동 피드(`on idle`), 대화상자 속 폼(`when open()`) |
+| PWA | `SwUpdate`로 새 버전 알림, 카메라 스캔은 `BarcodeDetector`가 있을 때만(점진적 향상) |
 | 변경 감지 | 모든 컴포넌트 `OnPush`(ESLint로 강제) |
 | 라우팅 | 화면마다 지연 로딩, `withComponentInputBinding`으로 경로·쿼리를 입력으로 받음 |
 
@@ -54,7 +55,7 @@ pnpm dev
 |---|---|
 | `pnpm test` | 데모 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 탭 간 알림), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
 | `pnpm test:storybook` | 모든 스토리를 Chromium에서 렌더링하고 axe 검사(`@storybook/addon-vitest`, `a11y.test: 'error'`) |
-| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데스크톱·모바일에서 업무 흐름, 동시 수정 충돌, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
+| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데스크톱·모바일에서 업무 흐름, 동시 수정 충돌, 접속 표시, 창고 도면, CSV 내려받기, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
 
 컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 같은 DB를 여는 서버를 하나 더 만들면 "다른 탭의 사용자"가 되어 충돌을 재현할 수 있습니다.
 
@@ -68,7 +69,7 @@ axe 통과만으로 끝내지 않고 아래 항목을 직접 점검했습니다.
 | 5.3.1 표 구성 | 표마다 `caption` 또는 이름 있는 영역, 열 제목 `th scope`, 정렬 상태 `aria-sort` |
 | 5.4.1 색 무관 인식 | 재고·실사·동기화 상태는 색과 글자를 함께. 차트는 범례·합계·표 보기 |
 | 5.4.3 명도 대비 | 글자 4.5:1 이상(토큰을 계산해 고름), 차트 색은 팔레트 검증 스크립트로 확인 |
-| 6.1.1 키보드 | 차트는 초점을 받고 좌우 화살표·Home·End·Esc로 날짜별 값을 읽음 |
+| 6.1.1 키보드 | 차트는 초점을 받고 좌우 화살표·Home·End·Esc로 날짜별 값을 읽음. 창고 도면의 칸은 버튼(`aria-pressed`)이고 이름에 수량·상태를 담음 |
 | 6.1.2 초점 | 화면을 바꾸면 새 화면 제목으로 초점 이동, 대화상자는 네이티브 `dialog` |
 | 6.1.3 조작 크기 | 백오피스 40px, 실사 앱 48px 이상(장갑 낀 손) |
 | 6.2.1 응답시간 | 알림은 6초 뒤 사라지지만 포인터·초점이 올라가면 멈추고 닫기 버튼 제공 |

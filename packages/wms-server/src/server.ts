@@ -23,6 +23,9 @@ import {
   type CreateCountRequest,
   type DashboardKpis,
   type Location,
+  type LocationDetail,
+  type LocationOverview,
+  type LocationStatus,
   type Movement,
   type MovementRequest,
   type Page,
@@ -412,6 +415,8 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         json(200, { zones: ZONES, locations: await load.locations(), users: await load.users() }),
     ],
     ['GET', '/api/dashboard', async () => json(200, await dashboard())],
+    ['GET', '/api/locations/overview', async () => json(200, { items: await locationOverview() })],
+    ['GET', '/api/locations/:id', async (_ctx, { id }) => json(200, await locationDetail(id!))],
     ['GET', '/api/skus', async (ctx) => json(200, await listSkus(ctx.query))],
     [
       'GET',
@@ -724,6 +729,68 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       page: q.page!,
       size: q.size!,
     };
+  }
+
+  async function locationOverview(): Promise<LocationOverview[]> {
+    const [locations, stocks, skus, counts, lines] = await Promise.all([
+      load.locations(),
+      load.stocks(),
+      load.skus(),
+      load.counts(),
+      load.lines(),
+    ]);
+    const summaries = new Map(skus.map((sku) => [sku.id, summarize(sku, stocks)]));
+    const active = new Map(
+      counts
+        .filter((task) => ['open', 'in_progress', 'submitted'].includes(task.status))
+        .map((t) => [t.id, t.code]),
+    );
+    const counting = new Map<string, string>();
+    for (const line of lines) {
+      const code = active.get(line.taskId);
+      if (code) counting.set(line.locationId, code);
+    }
+    const rank: Record<LocationStatus, number> = { empty: 0, ok: 1, low: 2, out: 3 };
+    return locations
+      .map((location) => {
+        const own = stocks.filter((stock) => stock.locationId === location.id && stock.onHand > 0);
+        let status: LocationStatus = own.length ? 'ok' : 'empty';
+        for (const stock of own) {
+          const sku = summaries.get(stock.skuId);
+          if (sku && rank[sku.status] > rank[status]) status = sku.status;
+        }
+        return {
+          location,
+          units: own.reduce((sum, stock) => sum + stock.onHand, 0),
+          value: own.reduce(
+            (sum, stock) => sum + stock.onHand * (summaries.get(stock.skuId)?.unitCost ?? 0),
+            0,
+          ),
+          skuCount: own.length,
+          status,
+          countingTask: counting.get(location.id) ?? null,
+        };
+      })
+      .sort((a, b) => a.location.code.localeCompare(b.location.code));
+  }
+
+  async function locationDetail(id: string): Promise<LocationDetail> {
+    await mustGet<Location>('locations', id, '로케이션');
+    const overview = (await locationOverview()).find((item) => item.location.id === id)!;
+    const [stocks, skus] = await Promise.all([load.stocks(), load.skus()]);
+    const items = stocks
+      .filter((stock) => stock.locationId === id && stock.onHand > 0)
+      .map((stock) => ({
+        sku: summarize(
+          skus.find((sku) => sku.id === stock.skuId)!,
+          stocks,
+        ),
+        onHand: stock.onHand,
+        reserved: stock.reserved,
+        version: stock.version,
+      }))
+      .sort((a, b) => b.onHand - a.onHand);
+    return { overview, items };
   }
 
   async function dashboard(): Promise<DashboardKpis> {

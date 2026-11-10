@@ -4,6 +4,8 @@ export {
   ifMatch,
   isVersionConflict,
   NetworkState,
+  type Peer,
+  Presence,
   provideWmsClient,
   SubmitLock,
   toApiError,

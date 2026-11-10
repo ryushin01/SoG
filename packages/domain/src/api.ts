@@ -148,6 +148,25 @@ export interface SubmitCountLineRequest {
   note?: string;
 }
 
+export type LocationStatus = 'empty' | 'ok' | 'low' | 'out';
+
+/** 창고 도면의 로케이션 한 칸 */
+export interface LocationOverview {
+  location: Location;
+  units: number;
+  value: number;
+  skuCount: number;
+  /** 이 칸에 있는 품목 중 가장 나쁜 상태(품목 전체 재고 기준) */
+  status: LocationStatus;
+  /** 진행 중인 실사 작업이 이 칸을 세고 있으면 작업 코드 */
+  countingTask: string | null;
+}
+
+export interface LocationDetail {
+  overview: LocationOverview;
+  items: { sku: SkuSummary; onHand: number; reserved: number; version: number }[];
+}
+
 export interface Reference {
   zones: Zone[];
   locations: Location[];

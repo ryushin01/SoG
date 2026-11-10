@@ -7,8 +7,11 @@
   </nav>
 
   <sog-page-header index="02" [label]="d.task.code" [heading]="d.task.title">
+    <button type="button" class="btn" (click)="void exportCsv()">차이 보고서 CSV</button>
     <sog-review-actions [task]="d.task" (changed)="detail.reload()" />
   </sog-page-header>
+
+  <sog-presence-notice [resource]="'counts/' + d.task.id" />
 
   <dl class="meta">
     <div>

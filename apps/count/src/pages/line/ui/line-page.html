@@ -54,6 +54,11 @@
         }
       </p>
 
+      <cnt-peer-notice
+        [resource]="'counts/' + taskId()"
+        [current]="'counts/' + taskId() + '/lines/' + lineId()"
+      />
+
       <div class="swatches">
         <p class="caption">로케이션 · {{ zoneLabel[l.location.zone] }}</p>
         <ul class="swatches__list">

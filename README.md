@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-0.1.0-911a46)
+![version](https://img.shields.io/badge/version-0.2.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -14,6 +14,10 @@
 ## 화면
 
 품목 사진은 이미지 파일 없이 코드(SVG)로 그렸습니다.
+
+| 창고 도면 | 함께 보는 사람 |
+|---|---|
+| ![구역·통로·랙·단을 실제 배치대로 펼친 격자, 칸마다 보유 수량 막대와 실사 중 점선, 오른쪽에 고른 로케이션의 품목 목록](docs/images/backoffice-map.jpg) | ![품목 상세 위에 박도윤이 백오피스에서 이 품목을 수정 중이라는 표시](docs/images/backoffice-presence.jpg) |
 
 | 운영 현황 | 동시 수정 충돌 |
 |---|---|
@@ -38,9 +42,11 @@
 | 기능 | 내용 |
 |---|---|
 | 운영 현황 | 재고 금액·수량, 부족·품절, 진행 중 실사, 재고 정확도, 14일 입출고 차트(키보드로 값 읽기, 표 보기), 구역별 재고, 최근 활동 |
-| 재고 | 품목명·코드·바코드 검색, 분류·상태·구역 필터(주소에 남음), 열 정렬. 다른 탭에서 입출고가 일어나면 표가 바로 바뀜 |
+| 재고 | 품목명·코드·바코드 검색, 분류·상태·구역 필터(주소에 남음), 열 정렬, 필터 그대로 CSV 내보내기. 다른 탭에서 입출고가 일어나면 표가 바로 바뀜 |
 | 품목 상세 | 기본 정보 수정, 로케이션별 재고 조정, 입고·출고·이동 등록, 이동 기록 |
-| 재고 실사 | 구역 단위 작업 생성(블라인드 실사), 현장 진행 실시간 확인, 차이 검토, 재실사 요청, 승인 시 재고 반영 |
+| 재고 실사 | 구역 단위 작업 생성(블라인드 실사), 현장 진행 실시간 확인, 차이 검토, 재실사 요청, 승인 시 재고 반영, 차이 보고서 CSV |
+| 창고 도면 | 구역·통로·랙·단을 실제 배치대로 펼친 격자. 칸마다 보유 수량, 부족·품절, 실사 중 표시, 칸을 고르면 보관 품목 |
+| 함께 보는 사람 | 같은 품목·실사 작업을 지금 보고 있는 관리자와 작업자, 수정 중 여부, 작업자가 세고 있는 품목 |
 | 활동 기록 | 입출고, 실사, 정보 수정, 막아 낸 동시 수정 충돌 |
 
 **현장 실사 앱** (`apps/count`, 주소 `/count/`, PWA)
@@ -49,11 +55,12 @@
 |---|---|
 | 작업 | 작업자를 고르면 배정된 실사 작업이 열림. 로케이션 순서로 묶은 품목 목록 |
 | 품목 실사 | 사진 갤러리, 같은 품목의 다른 로케이션, 큰 −/+ 수량 입력, 블라인드 실사, 메모. 저장하면 다음 품목으로 |
-| 바코드 | 현장 스캐너(키보드 입력)로 찍으면 해당 품목으로 이동 |
+| 바코드 | 현장 스캐너(키보드 입력)나 카메라(BarcodeDetector 지원 기기)로 찍으면 해당 품목으로 이동, 진동으로 결과 알림 |
+| 함께 세기 | 다른 작업자가 같은 품목 앞에 있으면 알려 이중 실사를 막음 |
 | 오프라인 | 센 수량은 기기 보낼함에 먼저 저장, 연결되면 자동으로 보냄. 진행 중 작업은 미리 받아 둠 |
-| 설치 | 서비스 워커와 앱 매니페스트로 홈 화면에 설치, 연결이 끊긴 곳에서도 열림 |
+| 설치 | 서비스 워커와 앱 매니페스트로 홈 화면에 설치, 연결이 끊긴 곳에서도 열림, 새 버전 알림 |
 
-**동시성 제어**: ETag·If-Match 낙관적 잠금(412 충돌 비교), Web Locks 쓰기 직렬화, 멱등 키, 실사 중 이동을 반영하는 정산 규칙, 중복 제출 잠금, BroadcastChannel 실시간 반영. 자세한 내용은 [동시성 제어](docs/concurrency.md)에 있습니다.
+**동시성 제어**: ETag·If-Match 낙관적 잠금(412 충돌 비교), Web Locks 쓰기 직렬화, 멱등 키, 실사 중 이동을 반영하는 정산 규칙, 중복 제출 잠금, BroadcastChannel 실시간 반영, 충돌 전에 알려 주는 접속 표시(presence). 자세한 내용은 [동시성 제어](docs/concurrency.md)에 있습니다.
 
 ## 기술 스택
 
@@ -63,8 +70,8 @@
 |---|---|
 | 구성 | pnpm 워크스페이스, Turborepo, Feature-Sliced Design v2.1 (Steiger로 검사) |
 | 프레임워크 | Angular 22 (standalone, zoneless, signals, `@if`·`@for`, `@defer`, Signal Forms, `httpResource`), TypeScript 6 |
-| PWA | @angular/service-worker, Web App Manifest |
-| 데이터 | 브라우저 안 데모 서버: IndexedDB, Web Locks API, BroadcastChannel |
+| PWA | @angular/service-worker(SwUpdate), Web App Manifest, BarcodeDetector, Vibration API |
+| 데이터 | 브라우저 안 데모 서버: IndexedDB, Web Locks API, BroadcastChannel(변경 알림, 접속 표시) |
 | 품질 | ESLint(angular-eslint, 템플릿 접근성 규칙), Prettier, husky + lint-staged, Vitest 5 + Testing Library + fake-indexeddb, Storybook 10(angular-vite) 스토리 테스트(실제 브라우저 + axe), Playwright + axe(프로덕션 빌드·배포 사이트 E2E) |
 | 배포 | Vercel(두 앱을 한 주소로), GitHub Actions, Dependabot |
 
@@ -97,7 +104,7 @@ apps/
 packages/
 ├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
 ├─ wms-server/   브라우저 안 데모 서버
-└─ wms-client/   Angular HTTP 연결, 변경 알림, 네트워크 상태, 중복 제출 잠금
+└─ wms-client/   Angular HTTP 연결, 변경 알림, 접속 표시, 네트워크 상태, 중복 제출 잠금
 e2e/             프로덕션 빌드 E2E
 docs/            문서와 스크린샷
 ```
@@ -106,7 +113,7 @@ docs/            문서와 스크린샷
 
 | 문서 | 내용 |
 |---|---|
-| [동시성 제어](docs/concurrency.md) | 낙관적 잠금, 쓰기 직렬화, 멱등 키, 실사 정산, 화면 쪽 경쟁, 오프라인 |
+| [동시성 제어](docs/concurrency.md) | 낙관적 잠금, 쓰기 직렬화, 멱등 키, 실사 정산, 접속 표시, 화면 쪽 경쟁, 오프라인 |
 | [개발 가이드](docs/development.md) | 구조, Angular 사용 방식, FSD, 개발 서버, 테스트, 접근성 점검 |
 | [디자인](docs/design.md) | 참고 사이트, 두 앱의 디자인 토큰, 품목 그림 |
 | [CI · 배포](docs/ci-deploy.md) | GitHub Actions, Vercel, 배포된 사이트 검사, Dependabot |

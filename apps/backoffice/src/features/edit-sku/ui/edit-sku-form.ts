@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { form, FormField, maxLength, min, required, submit } from '@angular/forms/signals';
 import { formatNumber, type Sku, type SkuDetail } from '@sog/domain';
-import { isVersionConflict, SubmitLock, toApiError } from '@/shared/api';
+import { isVersionConflict, Presence, SubmitLock, toApiError } from '@/shared/api';
 import { FieldErrors, Toaster } from '@/shared/ui';
 import { SkuApi } from '@/entities/sku';
 import { Session } from '@/entities/user';
@@ -104,6 +104,11 @@ export class EditSkuForm {
   });
 
   constructor() {
+    // 이 품목을 보고 있다는 것과, 저장하지 않은 입력이 있으면 수정 중이라는 것을 다른 탭에 알립니다.
+    inject(Presence).track(
+      () => `skus/${this.detail().sku.id}`,
+      () => ({ editing: this.dirty() }),
+    );
     effect(() => {
       const sku = this.detail().sku;
       untracked(() => {

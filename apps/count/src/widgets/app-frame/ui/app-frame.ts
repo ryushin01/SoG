@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs';
 import { OperatorSession } from '@/entities/operator';
 import { SyncStatus } from '@/features/sync-outbox';
@@ -24,6 +25,12 @@ import { SyncStatus } from '@/features/sync-outbox';
         <cnt-sync-status />
       </div>
     </header>
+    @if (updateReady()) {
+      <div class="update" role="status">
+        <p>새 버전이 준비되었습니다. 기기에 저장한 실사 기록은 그대로 남습니다.</p>
+        <button type="button" class="btn btn--solid" (click)="reload()">새로 고침</button>
+      </div>
+    }
     <main id="main" tabindex="-1">
       <ng-content />
     </main>
@@ -93,6 +100,16 @@ import { SyncStatus } from '@/features/sync-outbox';
       font-size: 0.875rem;
       font-weight: 600;
     }
+    .update {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.75rem var(--gutter);
+      background: var(--sky);
+      font-size: 0.875rem;
+    }
     main:focus {
       outline: none;
     }
@@ -132,6 +149,9 @@ export class AppFrame {
   private readonly document = inject(DOCUMENT);
   /** 아래쪽 탭의 현재 구역. 작업 목록·작업·품목 화면은 모두 실사 작업 탭입니다. */
   protected readonly section = signal<'tasks' | 'settings' | null>(null);
+  /** 서비스 워커가 새 버전을 받아 두었는지 */
+  protected readonly updateReady = signal(false);
+  private readonly updates = inject(SwUpdate);
 
   constructor() {
     let first = true;
@@ -151,11 +171,25 @@ export class AppFrame {
           this.document.getElementById('page-title')?.focus({ preventScroll: false }),
         );
       });
-    inject(DestroyRef).onDestroy(() => subscription.unsubscribe());
+    const updates = this.updates.isEnabled
+      ? this.updates.versionUpdates
+          .pipe(filter((event) => event.type === 'VERSION_READY'))
+          .subscribe(() => this.updateReady.set(true))
+      : null;
+    inject(DestroyRef).onDestroy(() => {
+      subscription.unsubscribe();
+      updates?.unsubscribe();
+    });
   }
 
   protected skip(event: Event): void {
     event.preventDefault();
     this.document.getElementById('main')?.focus();
+  }
+
+  /** 새 버전으로 바꾸고 다시 엽니다. 보낼함은 IndexedDB에 있어 사라지지 않습니다. */
+  protected async reload(): Promise<void> {
+    await this.updates.activateUpdate().catch(() => false);
+    this.document.location.reload();
   }
 }

@@ -11,7 +11,8 @@ const NAV = [
   { index: '00', path: '/', label: '운영 현황', exact: true },
   { index: '01', path: '/inventory', label: '재고', exact: false },
   { index: '02', path: '/counts', label: '재고 실사', exact: false },
-  { index: '03', path: '/activity', label: '활동 기록', exact: false },
+  { index: '03', path: '/map', label: '창고 도면', exact: false },
+  { index: '04', path: '/activity', label: '활동 기록', exact: false },
 ];
 
 /** 화면 틀: 본문 바로가기, 번호 붙은 주 메뉴, 사용자 전환, 실시간 표시, 알림 */

@@ -1,6 +1,8 @@
 import type {
   ChangeEvent,
   CountTaskDetail,
+  LocationDetail,
+  LocationOverview,
   Movement,
   Page,
   SkuDetail,
@@ -70,6 +72,38 @@ describe('조회', () => {
     const barcode = all.items[0]!.barcode;
     const found = (await call(server!, 'GET', `/api/skus?q=${barcode}`)).body as Page<SkuSummary>;
     expect(found.items.map((sku) => sku.barcode)).toEqual([barcode]);
+  });
+});
+
+describe('창고 도면', () => {
+  it('로케이션마다 수량·상태·실사 중 여부를 돌려준다', async () => {
+    const [server] = await tabs(1);
+    const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+      items: LocationOverview[];
+    };
+    expect(items).toHaveLength(42);
+    expect(items.some((item) => item.status === 'empty')).toBe(true);
+    // ct-003(A구역 2통로)이 진행 중
+    expect(
+      items.find((item) => item.location.code.startsWith('A-02-') && item.units > 0)!.countingTask,
+    ).toMatch(/^CC-/);
+    expect(
+      items
+        .filter((item) => item.location.zone === 'A' && item.location.aisle === 1)
+        .every((i) => i.countingTask === null),
+    ).toBe(true);
+  });
+
+  it('로케이션 상세는 수량이 많은 품목부터 보여 준다', async () => {
+    const [server] = await tabs(1);
+    const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+      items: LocationOverview[];
+    };
+    const busy = items.find((item) => item.skuCount > 1)!;
+    const detail = (await call(server!, 'GET', `/api/locations/${busy.location.id}`))
+      .body as LocationDetail;
+    expect(detail.items).toHaveLength(busy.skuCount);
+    expect(detail.items[0]!.onHand).toBeGreaterThanOrEqual(detail.items.at(-1)!.onHand);
   });
 });
 

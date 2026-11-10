@@ -11,7 +11,7 @@ import {
 import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { type ArtView, CATEGORY_LABEL, skuArtUrl, ZONE_LABEL } from '@sog/domain';
-import { WmsHost } from '@/shared/api';
+import { Presence, WmsHost } from '@/shared/api';
 import { AgoPipe } from '@/shared/lib';
 import { StateMessage } from '@/shared/ui';
 import {
@@ -22,6 +22,7 @@ import {
 } from '@/entities/count-task';
 import { OperatorSession } from '@/entities/operator';
 import { Outbox } from '@/entities/outbox';
+import { PeerNotice } from '@/features/show-presence';
 import { CountForm } from '@/features/submit-count';
 
 const VIEWS: { view: ArtView; label: string }[] = [
@@ -34,7 +35,7 @@ const VIEWS: { view: ArtView; label: string }[] = [
 @Component({
   selector: 'cnt-line-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, AgoPipe, StateMessage, CountForm],
+  imports: [RouterLink, AgoPipe, StateMessage, CountForm, PeerNotice],
   templateUrl: './line-page.html',
   styleUrl: './line-page.css',
 })
@@ -90,6 +91,14 @@ export class LinePage {
   );
 
   constructor() {
+    // 어느 품목 앞에 있는지 알려, 다른 작업자와 백오피스가 실시간으로 볼 수 있게 합니다.
+    inject(Presence).track(
+      () => `counts/${this.taskId()}/lines/${this.lineId()}`,
+      () => {
+        const line = this.line();
+        return { detail: line ? `${line.location.code} ${line.sku.name}` : '' };
+      },
+    );
     const title = inject(Title);
     effect(() => {
       const line = this.line();

@@ -1,6 +1,6 @@
 {
   "name": "@sog/count",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "dev": "ng serve --port 4201 --serve-path /count/",
     "build": "ng build",

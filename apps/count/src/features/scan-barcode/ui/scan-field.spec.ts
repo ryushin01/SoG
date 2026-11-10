@@ -39,4 +39,30 @@ describe('ScanField', () => {
 
     expect(screen.getByText(/이 작업에 없는 바코드입니다/)).toBeTruthy();
   });
+
+  describe('카메라 스캔', () => {
+    afterEach(() => {
+      delete (globalThis as { BarcodeDetector?: unknown }).BarcodeDetector;
+      Reflect.deleteProperty(navigator, 'mediaDevices');
+    });
+
+    it('BarcodeDetector가 없는 기기에서는 카메라 버튼을 숨긴다', async () => {
+      await render(ScanField, { inputs: { lines: [] } });
+      expect(screen.queryByRole('button', { name: '카메라로 스캔' })).toBeNull();
+    });
+
+    it('BarcodeDetector와 카메라가 있으면 카메라 버튼을 보여 준다', async () => {
+      (globalThis as { BarcodeDetector?: unknown }).BarcodeDetector = class {
+        detect() {
+          return Promise.resolve([]);
+        }
+      };
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: { getUserMedia: () => Promise.reject(new Error('denied')) },
+      });
+      await render(ScanField, { inputs: { lines: [] } });
+      expect(screen.getByRole('button', { name: '카메라로 스캔' })).toBeTruthy();
+    });
+  });
 });

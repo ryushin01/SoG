@@ -22,6 +22,7 @@ import { UserNamePipe } from '@/entities/user';
 import { AdjustStockForm } from '@/features/adjust-stock';
 import { EditSkuForm } from '@/features/edit-sku';
 import { MovementForm } from '@/features/record-movement';
+import { PresenceNotice } from '@/features/show-presence';
 
 @Component({
   selector: 'sog-sku-detail-page',
@@ -41,6 +42,7 @@ import { MovementForm } from '@/features/record-movement';
     AdjustStockForm,
     EditSkuForm,
     MovementForm,
+    PresenceNotice,
   ],
   templateUrl: './sku-detail-page.html',
   styleUrl: './sku-detail-page.css',

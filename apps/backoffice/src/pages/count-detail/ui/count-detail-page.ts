@@ -1,4 +1,5 @@
-import { httpResource } from '@angular/common/http';
+import { HttpClient, httpResource } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,18 +13,21 @@ import {
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import {
+  COUNT_STATUS_LABEL,
   type CountLineView,
   type CountTaskDetail,
+  type Reference,
   settledOnHand,
   variance,
   ZONE_LABEL,
 } from '@sog/domain';
-import { WmsHost } from '@/shared/api';
-import { AgoPipe, DatePipe, DeltaPipe, NumPipe, WonPipe } from '@/shared/lib';
+import { Presence, WmsHost } from '@/shared/api';
+import { AgoPipe, DatePipe, DeltaPipe, downloadCsv, NumPipe, WonPipe } from '@/shared/lib';
 import { PageHeader, StateMessage } from '@/shared/ui';
 import { CountProgress, CountStatusBadge } from '@/entities/count';
-import { UserNamePipe } from '@/entities/user';
+import { Session, UserNamePipe } from '@/entities/user';
 import { RecountButton, ReviewActions } from '@/features/review-count';
+import { PresenceNotice } from '@/features/show-presence';
 
 type LineFilter = 'all' | 'variance' | 'pending' | 'moved';
 
@@ -44,6 +48,7 @@ type LineFilter = 'all' | 'variance' | 'pending' | 'moved';
     UserNamePipe,
     RecountButton,
     ReviewActions,
+    PresenceNotice,
   ],
   templateUrl: './count-detail-page.html',
   styleUrl: './count-detail-page.css',
@@ -51,6 +56,8 @@ type LineFilter = 'all' | 'variance' | 'pending' | 'moved';
 export class CountDetailPage {
   readonly taskId = input.required<string>();
   private readonly host = inject(WmsHost);
+  private readonly session = inject(Session);
+  private readonly http = inject(HttpClient);
   protected readonly zoneLabel = ZONE_LABEL;
 
   protected readonly detail = httpResource<CountTaskDetail>(() => `/api/counts/${this.taskId()}`);
@@ -105,6 +112,7 @@ export class CountDetailPage {
   });
 
   constructor() {
+    inject(Presence).track(() => `counts/${this.taskId()}`);
     const title = inject(Title);
     effect(() => {
       const task = this.data()?.task;
@@ -142,5 +150,60 @@ export class CountDetailPage {
 
   protected settled(line: CountLineView): number | null {
     return line.countedQty === null ? null : settledOnHand(line.countedQty, line.movedSinceCount);
+  }
+
+  /** 실사 차이 보고서: 장부·실사·차이·차이 금액·승인 시 재고를 항목마다 */
+  protected async exportCsv(): Promise<void> {
+    const data = this.data();
+    if (!data) return;
+    // 사용자 목록을 아직 못 받았으면 먼저 받아, 센 사람 칸에 ID 대신 이름이 들어가게 합니다.
+    const users = this.session.users().length
+      ? this.session.users()
+      : (await firstValueFrom(this.http.get<Reference>('/api/reference'))).users;
+    const nameOf = (id: string | null) => users.find((user) => user.id === id)?.name ?? id ?? '';
+    const { task, lines } = data;
+    const state = { pending: '미실사', counted: '완료', recount: '재실사 요청' } as const;
+    downloadCsv(
+      `sog-실사-${task.code}.csv`,
+      [
+        '작업',
+        '상태',
+        '로케이션',
+        '품목 코드',
+        '품목명',
+        '단위',
+        '장부',
+        '실사',
+        '차이',
+        '차이 금액',
+        '실사 중 이동',
+        '승인 시 재고',
+        '항목 상태',
+        '센 사람',
+        '센 시각',
+        '메모',
+      ],
+      lines.map((line) => {
+        const v = variance(line);
+        return [
+          task.code,
+          COUNT_STATUS_LABEL[task.status],
+          line.location.code,
+          line.sku.code,
+          line.sku.name,
+          line.sku.unit,
+          line.expectedQty,
+          line.countedQty,
+          v,
+          v === null ? null : v * line.sku.unitCost,
+          line.movedSinceSnapshot,
+          this.settled(line),
+          state[line.status],
+          nameOf(line.countedBy),
+          line.countedAt,
+          line.note,
+        ];
+      }),
+    );
   }
 }

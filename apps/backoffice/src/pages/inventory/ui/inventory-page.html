@@ -4,6 +4,9 @@
   heading="재고"
   description="품목별 보유·가용 수량과 상태를 봅니다. 다른 탭에서 입출고가 일어나면 표가 바로 바뀝니다."
 >
+  <button type="button" class="btn" [disabled]="exportLock.pending()" (click)="exportCsv()">
+    {{ exportLock.pending() ? '내보내는 중…' : 'CSV 내보내기' }}
+  </button>
   <button type="button" class="btn btn--primary" (click)="movementOpen.set(true)">
     입출고 등록
   </button>

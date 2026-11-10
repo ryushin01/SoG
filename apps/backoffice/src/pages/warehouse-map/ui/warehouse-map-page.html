@@ -1,0 +1,153 @@
+<sog-page-header
+  index="03"
+  label="Floor map"
+  heading="창고 도면"
+  description="구역·통로·랙·단을 실제 배치대로 펼쳤습니다. 칸의 막대는 보유 수량이고, 칸을 고르면 그 로케이션의 품목이 보입니다."
+/>
+
+@if (items(); as all) {
+  <div class="legend" aria-label="범례">
+    <span class="legend__item"
+      ><span class="swatch swatch--fill" aria-hidden="true"></span>보유 수량(가장 많은 칸 = 꽉
+      참)</span
+    >
+    <span class="legend__item"
+      ><span class="mark mark--alert" aria-hidden="true">!</span>부족·품절 품목
+      {{ summary().alert }}칸</span
+    >
+    <span class="legend__item"
+      ><span class="mark mark--count" aria-hidden="true"></span>실사 중
+      {{ summary().counting }}칸</span
+    >
+    <span class="legend__item"
+      ><span class="swatch swatch--empty" aria-hidden="true"></span>비어 있음
+      {{ summary().empty }}칸</span
+    >
+  </div>
+
+  <div class="layout">
+    <div class="floor" [class.stale]="overview.isLoading()">
+      @for (zone of zones(); track zone.code) {
+        <section class="zone" [attr.aria-labelledby]="'zone-' + zone.code">
+          <h2 class="zone__title" [id]="'zone-' + zone.code">
+            {{ zoneLabel[zone.code] }}
+            <span class="zone__meta"
+              >{{ zone.units | num }}개 · {{ zone.used }}/{{ zone.total }}칸 사용</span
+            >
+          </h2>
+          @for (aisle of zone.aisles; track aisle.aisle) {
+            <div
+              class="aisle"
+              role="group"
+              [attr.aria-label]="zone.code + '구역 ' + aisle.aisle + '통로'"
+            >
+              <span class="aisle__label" aria-hidden="true">{{
+                aisle.aisle < 10 ? '0' + aisle.aisle : aisle.aisle
+              }}</span>
+              <div class="racks">
+                @for (rack of aisle.racks; track rack.rack) {
+                  <div class="rack">
+                    @for (cell of rack.cells; track cell.location.id) {
+                      <button
+                        type="button"
+                        class="cell"
+                        [class.cell--empty]="cell.status === 'empty'"
+                        [class.cell--alert]="cell.status === 'low' || cell.status === 'out'"
+                        [class.cell--count]="cell.countingTask"
+                        [class.cell--on]="selectedId() === cell.location.id"
+                        [attr.aria-pressed]="selectedId() === cell.location.id"
+                        [attr.aria-label]="label(cell)"
+                        (click)="select(cell.location.id)"
+                      >
+                        <span
+                          class="cell__fill"
+                          [style.height.%]="fill(cell)"
+                          aria-hidden="true"
+                        ></span>
+                        <span class="cell__code" aria-hidden="true">{{
+                          cell.location.code.slice(5)
+                        }}</span>
+                        <span class="cell__units" aria-hidden="true">{{ cell.units | num }}</span>
+                        @if (cell.status === 'low' || cell.status === 'out') {
+                          <span class="cell__flag" aria-hidden="true">!</span>
+                        }
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </section>
+      }
+    </div>
+
+    <aside class="panel side" aria-labelledby="loc-title">
+      @if (selectedId() && (detail.hasValue() ? detail.value() : undefined); as d) {
+        <p class="eyebrow">
+          <span>Location</span><span>{{ zoneLabel[d.overview.location.zone] }}</span>
+        </p>
+        <h2 id="loc-title" class="side__title mono">{{ d.overview.location.code }}</h2>
+        <dl class="facts">
+          <div>
+            <dt>보유</dt>
+            <dd class="display">{{ d.overview.units | num }}</dd>
+          </div>
+          <div>
+            <dt>품목</dt>
+            <dd class="display">{{ d.overview.skuCount }}</dd>
+          </div>
+          <div>
+            <dt>재고 금액</dt>
+            <dd>{{ d.overview.value | won }}</dd>
+          </div>
+          <div>
+            <dt>상태</dt>
+            <dd>
+              {{ statusText[d.overview.status] }}
+              @if (d.overview.countingTask) {
+                <br /><span class="badge badge--info">실사 중 {{ d.overview.countingTask }}</span>
+              }
+            </dd>
+          </div>
+        </dl>
+        <ul class="items">
+          @for (item of d.items; track item.sku.id) {
+            <li class="item">
+              <sog-sku-art class="item__art" [sku]="item.sku" [size]="44" [decorative]="true" />
+              <div class="item__text">
+                <a class="item__name" [routerLink]="['/inventory', item.sku.id]">{{
+                  item.sku.name
+                }}</a>
+                <p class="mono muted">{{ item.sku.code }}</p>
+              </div>
+              <div class="item__qty">
+                <strong>{{ item.onHand | num }}</strong>
+                <span class="muted">{{ item.sku.unit }}</span>
+                <sog-stock-status-badge [status]="item.sku.status" />
+              </div>
+            </li>
+          } @empty {
+            <li class="muted">비어 있는 로케이션입니다. 입고하면 여기에 품목이 보입니다.</li>
+          }
+        </ul>
+      } @else if (selectedId() && detail.isLoading()) {
+        <h2 id="loc-title" class="visually-hidden">로케이션 상세</h2>
+        <sog-state-message message="로케이션을 불러오는 중입니다." />
+      } @else {
+        <h2 id="loc-title" class="side__title">로케이션을 고르세요</h2>
+        <p class="muted">
+          도면의 칸을 누르면 보관 중인 품목과 수량이 보입니다. 전체 {{ all.length }}칸입니다.
+        </p>
+      }
+    </aside>
+  </div>
+} @else if (overview.error()) {
+  <sog-state-message
+    kind="error"
+    message="창고 도면을 불러오지 못했습니다."
+    (retry)="overview.reload()"
+  />
+} @else {
+  <sog-state-message message="창고 도면을 불러오는 중입니다." />
+}
