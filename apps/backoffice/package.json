@@ -7,7 +7,6 @@
     "test": "ng test --watch=false",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "lint": "eslint . --max-warnings 0 && steiger ./src",
-    "e2e": "playwright test",
     "build-storybook": "ng run backoffice:build-storybook",
     "storybook": "ng run backoffice:storybook",
     "test:storybook": "vitest run --config vitest.storybook.config.mts"
@@ -34,8 +33,6 @@
     "@angular/build": "^22.2.6",
     "@angular/cli": "^22.2.6",
     "@angular/compiler-cli": "^22.2.0",
-    "@axe-core/playwright": "^4.14.0",
-    "@playwright/test": "^1.65.0",
     "@storybook/addon-a11y": "10.6.6",
     "@storybook/addon-docs": "10.6.6",
     "@storybook/addon-vitest": "10.6.6",
