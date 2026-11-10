@@ -753,11 +753,15 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     const rank: Record<LocationStatus, number> = { empty: 0, ok: 1, low: 2, out: 3 };
     return locations
       .map((location) => {
-        const own = stocks.filter((stock) => stock.locationId === location.id && stock.onHand > 0);
+        const here = stocks.filter((stock) => stock.locationId === location.id);
+        const own = here.filter((stock) => stock.onHand > 0);
         let status: LocationStatus = own.length ? 'ok' : 'empty';
-        for (const stock of own) {
+        for (const stock of here) {
           const sku = summaries.get(stock.skuId);
-          if (sku && rank[sku.status] > rank[status]) status = sku.status;
+          if (!sku) continue;
+          // 다 나가 0이 된 기록은 수량·품목 수에는 넣지 않지만, 부족·품절 경고에는 넣습니다.
+          if (stock.onHand <= 0 && sku.status === 'ok') continue;
+          if (rank[sku.status] > rank[status]) status = sku.status;
         }
         return {
           location,

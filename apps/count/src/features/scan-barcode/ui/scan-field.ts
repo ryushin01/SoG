@@ -170,14 +170,18 @@ export class ScanField {
       video.srcObject = stream;
       await video.play();
       if (stale()) {
-        this.stopCamera();
+        // 그사이 새 세션이 열렸으면 새 카메라는 두고 이 세션의 스트림만 끕니다.
+        if (this.stream === stream) this.stopCamera();
+        else stream.getTracks().forEach((track) => track.stop());
         return;
       }
       this.cameraMessage.set('바코드를 화면 가운데에 맞춰 주세요.');
       const detector = new Detector({ formats: ['ean_13', 'code_128', 'qr_code'] });
       const scan = async () => {
-        if (!this.stream) return;
+        if (!this.stream || stale()) return;
         const [code] = await detector.detect(video).catch(() => [] as DetectedBarcode[]);
+        // 인식하는 사이 닫혔거나 다시 열렸으면 이전 세션의 결과는 버립니다.
+        if (stale()) return;
         if (code?.rawValue) {
           this.closeCamera();
           this.value.set(code.rawValue);

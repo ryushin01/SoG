@@ -94,6 +94,45 @@ describe('창고 도면', () => {
     ).toBe(true);
   });
 
+  it('마지막 수량까지 출고해 0이 된 로케이션은 비어 있음이 아니라 품절로 표시한다', async () => {
+    const [server] = await tabs(1);
+    const list = (await call(server!, 'GET', '/api/skus?size=100')).body as Page<SkuSummary>;
+    // 로케이션 한 곳에만 있는 품목을 골라 그 재고를 모두 출고합니다.
+    for (const sku of list.items) {
+      const detail = (await call(server!, 'GET', `/api/skus/${sku.id}`)).body as SkuDetail;
+      if (
+        detail.stocks.length !== 1 ||
+        detail.stocks[0]!.reserved > 0 ||
+        detail.stocks[0]!.onHand < 1
+      )
+        continue;
+      const stock = detail.stocks[0]!;
+      const others = (
+        (await call(server!, 'GET', `/api/locations/${stock.locationId}`)).body as LocationDetail
+      ).items;
+      if (others.length !== 1) continue;
+      const shipped = await call(server!, 'POST', '/api/movements', {
+        body: {
+          type: 'shipment',
+          skuId: sku.id,
+          fromLocationId: stock.locationId,
+          qty: stock.onHand,
+          reason: '전량 출고',
+        },
+      });
+      expect(shipped.body).toEqual(expect.objectContaining({ type: 'shipment' }));
+      const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+        items: LocationOverview[];
+      };
+      const cell = items.find((item) => item.location.id === stock.locationId)!;
+      expect(cell.units).toBe(0);
+      expect(cell.skuCount).toBe(0);
+      expect(cell.status).toBe('out');
+      return;
+    }
+    throw new Error('조건에 맞는 품목이 없습니다.');
+  });
+
   it('로케이션 상세는 수량이 많은 품목부터 보여 준다', async () => {
     const [server] = await tabs(1);
     const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
