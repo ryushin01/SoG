@@ -11,7 +11,7 @@ test('창고 도면에서 칸을 고르면 그 로케이션의 품목이 보이�
   await expect(page.getByRole('heading', { level: 1, name: '창고 도면' })).toBeVisible();
   await expectAccessibleLayout(page);
 
-  const cell = page.getByRole('button', { name: /^A-02-02-1,/ });
+  const cell = page.getByRole('button', { name: /^A-02-02-1\b/ });
   await cell.click();
   await expect(cell).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { level: 2, name: 'A-02-02-1' })).toBeVisible();

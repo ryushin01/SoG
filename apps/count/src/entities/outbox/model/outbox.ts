@@ -88,7 +88,7 @@ export class Outbox {
       message: null,
       attempts: 0,
     };
-    await this.save(item);
+    await this.save(item, true);
     void this.flush();
     return item;
   }
@@ -158,8 +158,13 @@ export class Outbox {
     }
   }
 
-  private async save(item: OutboxItem): Promise<void> {
-    await this.store.set(item.id, item).catch(() => undefined);
+  /**
+   * 기기에 쓰고 목록을 바꿉니다. strict이면 기기 쓰기 실패를 그대로 던져, 새 기록이
+   * 저장되지 않았는데 저장된 것처럼 보이지 않게 합니다(상태 전환 같은 내부 갱신은 strict가 아님).
+   */
+  private async save(item: OutboxItem, strict = false): Promise<void> {
+    if (strict) await this.store.set(item.id, item);
+    else await this.store.set(item.id, item).catch(() => undefined);
     this.items.update((items) => {
       const index = items.findIndex((i) => i.id === item.id);
       if (index === -1) return [...items, item];

@@ -132,12 +132,9 @@ export class WarehouseMapPage {
     return cell.units === 0 ? 0 : Math.max(6, (cell.units / this.maxUnits()) * 100);
   }
 
-  protected label(cell: LocationOverview): string {
-    const parts = [
-      cell.location.code,
-      `${cell.units.toLocaleString('ko-KR')}개`,
-      `품목 ${cell.skuCount}종`,
-    ];
+  /** 칸 이름 뒤에 붙는 숨김 설명: 개수 단위, 품목 수, 상태, 실사 중 */
+  protected detailText(cell: LocationOverview): string {
+    const parts = [`개, 품목 ${cell.skuCount}종`];
     if (cell.status === 'low' || cell.status === 'out') parts.push(STATUS_TEXT[cell.status]);
     if (cell.status === 'empty') parts.push('비어 있음');
     if (cell.countingTask) parts.push(`실사 중 ${cell.countingTask}`);

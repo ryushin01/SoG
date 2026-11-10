@@ -71,6 +71,10 @@
     </div>
   </div>
 
+  @if (saveError(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
   <button type="submit" class="btn btn--solid btn--block" [disabled]="saving()">
     {{ lock.pending() ? '저장 중…' : network.online() ? '저장하고 다음' : '기기에 저장하고 다음' }}
   </button>

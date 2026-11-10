@@ -141,7 +141,8 @@
 }
 
 .cell__code {
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
+  letter-spacing: -0.02em;
   color: var(--ink-soft);
 }
 

@@ -56,7 +56,6 @@
                         [class.cell--count]="cell.countingTask"
                         [class.cell--on]="selectedId() === cell.location.id"
                         [attr.aria-pressed]="selectedId() === cell.location.id"
-                        [attr.aria-label]="label(cell)"
                         (click)="select(cell.location.id)"
                       >
                         <span
@@ -64,10 +63,12 @@
                           [style.height.%]="fill(cell)"
                           aria-hidden="true"
                         ></span>
-                        <span class="cell__code" aria-hidden="true">{{
-                          cell.location.code.slice(5)
-                        }}</span>
-                        <span class="cell__units" aria-hidden="true">{{ cell.units | num }}</span>
+                        <!-- 보이는 글자로 이름이 시작해야 음성 명령으로도 누를 수 있습니다(레이블과 네임). -->
+                        <span class="cell__code">{{ cell.location.code }}</span>
+                        <span class="cell__units"
+                          ><span class="visually-hidden">, </span>{{ cell.units | num
+                          }}<span class="visually-hidden">{{ detailText(cell) }}</span></span
+                        >
                         @if (cell.status === 'low' || cell.status === 'out') {
                           <span class="cell__flag" aria-hidden="true">!</span>
                         }

@@ -41,6 +41,7 @@ async function setup(blind: boolean) {
   // 서버로 보내지 않고 보낼함에 쌓이는 것만 봅니다.
   view.fixture.debugElement.injector.get(NetworkState).simulatedOffline.set(true);
   return {
+    fixture: view.fixture,
     saved,
     outbox: view.fixture.debugElement.injector.get(Outbox),
     unsaved: view.fixture.debugElement.injector.get(UnsavedWork),
@@ -90,5 +91,31 @@ describe('CountForm', () => {
     expect(outbox.items()).toHaveLength(0);
     // 다시 고칠 수 있게 입력이 잠기지 않아야 합니다.
     expect((qty as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('기기 저장에 실패하면 저장된 것처럼 넘어가지 않고 알린다', async () => {
+    const { saved, outbox, unsaved } = await setup(false);
+    vi.spyOn(outbox, 'enqueue').mockRejectedValueOnce(new Error('QuotaExceededError'));
+    await userEvent.click(screen.getByRole('button', { name: '1 더하기' }));
+    await userEvent.click(screen.getByRole('button', { name: /저장하고 다음/ }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText(/기기에 저장하지 못했습니다/)).toBeTruthy();
+    expect(saved).not.toHaveBeenCalled();
+    expect(unsaved.dirty()).toBe(true);
+    expect((screen.getByLabelText(/센 수량/) as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('저장이 끝나기 전에 폼이 사라져도 저장이 끝날 때까지 보호한다', async () => {
+    const view = await setup(false);
+    let finish!: () => void;
+    vi.spyOn(view.outbox, 'enqueue').mockImplementationOnce(
+      () => new Promise((resolve) => (finish = () => resolve({} as never))),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /저장하고 다음/ }));
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    view.fixture.destroy();
+    expect(view.unsaved.dirty()).toBe(true);
+    finish();
+    await vi.waitFor(() => expect(view.unsaved.dirty()).toBe(false));
   });
 });

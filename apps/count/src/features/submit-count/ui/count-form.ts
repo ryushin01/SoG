@@ -50,6 +50,7 @@ export class CountForm implements OnInit {
   protected readonly lock = new SubmitLock({ keepLockedOnSuccess: true });
   /** 검증을 통과해 보낼함에 넣는 중 */
   protected readonly saving = signal(false);
+  protected readonly saveError = signal<string | null>(null);
 
   protected readonly model = signal({ qty: 0, note: '' });
   protected readonly form = form(this.model, (path) => {
@@ -111,15 +112,25 @@ export class CountForm implements OnInit {
         const line = this.line();
         const { qty, note } = this.model();
         this.saving.set(true);
-        await this.outbox.enqueue({
-          taskId: line.taskId,
-          lineId: line.id,
-          skuName: line.sku.name,
-          locationCode: line.location.code,
-          baseVersion: line.version,
-          countedQty: Number(qty),
-          note: note.trim(),
-        });
+        this.saveError.set(null);
+        const release = this.unsaved.beginSave();
+        try {
+          await this.outbox.enqueue({
+            taskId: line.taskId,
+            lineId: line.id,
+            skuName: line.sku.name,
+            locationCode: line.location.code,
+            baseVersion: line.version,
+            countedQty: Number(qty),
+            note: note.trim(),
+          });
+        } catch (error) {
+          // 기기에 쓰지 못했으면 저장된 것처럼 넘어가지 않고, 입력을 그대로 둔 채 알립니다.
+          this.saveError.set('기기에 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 눌러 주세요.');
+          throw error;
+        } finally {
+          release();
+        }
         this.committed = true;
         this.unsaved.mark(this, false);
         // 저장하는 사이 다른 품목으로 넘어갔으면 이 폼의 결과로 화면을 움직이지 않습니다.
