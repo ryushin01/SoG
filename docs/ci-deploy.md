@@ -24,10 +24,10 @@ Dependabot(`.github/dependabot.yml`)은 메이저를 뺀 업데이트를 주 1�
 
 | 주소 | 내용 |
 |---|---|
-| https://sog-pi.vercel.app/ | 백오피스 |
-| https://sog-pi.vercel.app/count/ | 현장 실사 앱(PWA) |
-| https://sog-pi.vercel.app/storybook/backoffice | 백오피스 Storybook |
-| https://sog-pi.vercel.app/storybook/count | 실사 앱 Storybook |
+| https://sog-ryushin01.vercel.app/ | 백오피스 |
+| https://sog-ryushin01.vercel.app/count/ | 현장 실사 앱(PWA) |
+| https://sog-ryushin01.vercel.app/storybook/backoffice | 백오피스 Storybook |
+| https://sog-ryushin01.vercel.app/storybook/count | 실사 앱 Storybook |
 
 설정은 `vercel.json`에 있습니다.
 
@@ -41,7 +41,7 @@ Dependabot(`.github/dependabot.yml`)은 메이저를 뺀 업데이트를 주 1�
 ## 배포된 사이트 검사
 
 ```bash
-E2E_BASE_URL=https://sog-pi.vercel.app pnpm --filter @sog/e2e exec playwright test
+E2E_BASE_URL=https://sog-ryushin01.vercel.app pnpm --filter @sog/e2e exec playwright test
 ```
 
 로컬 서버 없이 배포된 사이트에 같은 E2E를 돌립니다.
