@@ -15,7 +15,7 @@ jobs:
     name: Lint · Typecheck · Test · Storybook · Build · E2E
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # pnpm 버전은 package.json의 packageManager를 따름
       - uses: pnpm/action-setup@v4
