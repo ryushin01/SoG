@@ -1,0 +1,17 @@
+node_modules
+dist
+out-tsc
+coverage
+storybook-static
+playwright-report
+test-results
+.angular
+.turbo
+*.tsbuildinfo
+.env*
+!.env.example
+.DS_Store
+.vercel
+
+*storybook.log
+site

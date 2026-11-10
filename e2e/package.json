@@ -1,0 +1,19 @@
+{
+  "name": "@sog/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "node ../scripts/assemble-site.mjs && playwright test",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "devDependencies": {
+    "@sog/backoffice": "workspace:*",
+    "@sog/count": "workspace:*",
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24",
+    "typescript": "~6.0.3"
+  }
+}

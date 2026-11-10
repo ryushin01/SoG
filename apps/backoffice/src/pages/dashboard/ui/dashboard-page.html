@@ -1,0 +1,117 @@
+<sog-page-header
+  index="00"
+  label="Overview"
+  heading="운영 현황"
+  description="평택 1센터의 재고 규모, 부족 품목, 실사 진행 상황을 한눈에 봅니다."
+/>
+
+@if (data(); as k) {
+  <section class="kpis" aria-labelledby="kpi-title">
+    <h2 id="kpi-title" class="visually-hidden">핵심 지표</h2>
+    <dl class="kpis__grid" [class.stale]="kpis.isLoading()">
+      <div class="kpi kpi--wide">
+        <dt>재고 금액</dt>
+        <dd>
+          <span class="display kpi__value">{{ k.inventoryValue | won }}</span>
+        </dd>
+      </div>
+      <div class="kpi">
+        <dt>보유 수량</dt>
+        <dd>
+          <span class="display kpi__value">{{ k.totalUnits | num }}</span
+          ><span class="kpi__unit">개</span><span class="kpi__sub">{{ k.skuCount }}종 품목</span>
+        </dd>
+      </div>
+      <div class="kpi">
+        <dt>부족·품절</dt>
+        <dd>
+          <a class="kpi__link" routerLink="/inventory" [queryParams]="{ status: 'low' }">
+            <span class="display kpi__value">{{ k.lowStock + k.outOfStock }}</span>
+            <span class="kpi__unit">종</span
+            ><span class="kpi__sub">품절 {{ k.outOfStock }}종 포함</span>
+          </a>
+        </dd>
+      </div>
+      <div class="kpi">
+        <dt>진행 중 실사</dt>
+        <dd>
+          <span class="display kpi__value">{{ k.openCounts }}</span
+          ><span class="kpi__unit">건</span
+          ><span class="kpi__sub">검토 대기 {{ k.pendingReview }}건</span>
+        </dd>
+      </div>
+      <div class="kpi">
+        <dt>재고 정확도</dt>
+        <dd>
+          <span class="display kpi__value">{{ k.accuracy ?? '—' }}</span
+          ><span class="kpi__unit">%</span><span class="kpi__sub">최근 승인한 실사 기준</span>
+        </dd>
+      </div>
+    </dl>
+  </section>
+
+  <div class="grid">
+    <section class="panel span-2" aria-labelledby="flow-title">
+      <p class="eyebrow"><span>01</span><span>Flow · 14 days</span></p>
+      <h2 id="flow-title" class="section-title">입출고 흐름</h2>
+      @defer (on viewport) {
+        <sog-flow-chart [flow]="k.flow" />
+      } @placeholder {
+        <div class="chart-placeholder" aria-hidden="true"></div>
+      } @loading (minimum 200ms) {
+        <sog-state-message message="차트를 불러오는 중입니다." />
+      }
+    </section>
+
+    <section class="panel" aria-labelledby="zone-title">
+      <p class="eyebrow"><span>02</span><span>Zones</span></p>
+      <h2 id="zone-title" class="section-title">구역별 재고</h2>
+      <sog-zone-stock [zones]="k.zoneValue" />
+    </section>
+
+    <section class="panel" aria-labelledby="review-title">
+      <p class="eyebrow"><span>03</span><span>Cycle counts</span></p>
+      <h2 id="review-title" class="section-title">진행 중인 실사</h2>
+      <ul class="tasks">
+        @for (task of tasks(); track task.id) {
+          <li class="task">
+            <a class="task__link" [routerLink]="['/counts', task.id]">
+              <span class="mono muted">{{ task.code }}</span>
+              <span class="task__title">{{ task.title }}</span>
+            </a>
+            <div class="task__meta">
+              <sog-count-status-badge [status]="task.status" />
+              <span class="muted">{{ task.assignee.name }}</span>
+            </div>
+            <sog-count-progress
+              [counted]="task.countedCount"
+              [total]="task.lineCount"
+              [name]="task.code + ' 진행률'"
+            />
+          </li>
+        } @empty {
+          <li class="muted">진행 중인 실사가 없습니다.</li>
+        }
+      </ul>
+      <a class="btn btn--small more" routerLink="/counts">실사 전체 보기</a>
+    </section>
+
+    <section class="panel span-2" aria-labelledby="activity-title">
+      <p class="eyebrow"><span>04</span><span>Activity</span></p>
+      <h2 id="activity-title" class="section-title">최근 활동</h2>
+      @defer (on idle) {
+        <sog-activity-feed [limit]="8" />
+      } @placeholder {
+        <sog-state-message message="활동 기록을 준비하는 중입니다." />
+      }
+    </section>
+  </div>
+} @else if (kpis.error()) {
+  <sog-state-message
+    kind="error"
+    message="운영 현황을 불러오지 못했습니다."
+    (retry)="kpis.reload()"
+  />
+} @else {
+  <sog-state-message message="운영 현황을 불러오는 중입니다." />
+}

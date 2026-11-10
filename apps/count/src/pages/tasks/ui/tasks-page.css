@@ -1,0 +1,93 @@
+.title {
+  margin: 0.25rem 0 2rem;
+  font-size: clamp(2.25rem, 9vw, 3.5rem);
+}
+
+.title:focus {
+  outline: none;
+}
+
+.offline {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--stone);
+  font-size: 0.875rem;
+}
+
+.section {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0;
+  margin: 0 0 2.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: grid;
+  gap: 0.625rem;
+  height: 100%;
+  padding: 1.25rem 0.25rem;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  transition: background 0.3s var(--ease);
+}
+
+.card:hover {
+  background: var(--stone);
+}
+
+.card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card__code {
+  font-size: 0.8125rem;
+}
+
+.card__title {
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.card__meta {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.card .pill {
+  justify-self: start;
+}
+
+.late {
+  color: var(--wine);
+  font-weight: 600;
+}
+
+.empty {
+  padding: 1.5rem 0;
+}
+
+.done {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.done li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}

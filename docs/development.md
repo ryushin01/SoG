@@ -1,0 +1,80 @@
+# 개발 가이드
+
+## 구조
+
+```
+apps/
+├─ backoffice/   WMS 백오피스 (Angular 22, 주소 /)
+└─ count/        현장 재고 실사 PWA (Angular 22, 주소 /count/)
+packages/
+├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
+├─ wms-server/   브라우저 안 데모 서버 (IndexedDB, Web Locks, ETag, 멱등 키, 변경 알림)
+└─ wms-client/   Angular 연결 (HttpClient 인터셉터, 변경 알림, 네트워크 상태, 중복 제출 잠금)
+e2e/             프로덕션 빌드 E2E (Playwright + axe)
+scripts/         배포 구조 조립, 정적 서버
+```
+
+공유 패키지는 빌드하지 않고 TypeScript 소스를 그대로 씁니다. 앱의 `tsconfig.json` `paths`가 `@sog/*`를 각 패키지의 `src/index.ts`로 연결해, Angular 컴파일러가 앱 코드와 함께 컴파일합니다(데코레이터가 있는 `wms-client`도 마찬가지).
+
+## Angular 사용 방식
+
+| 항목 | 적용 |
+|---|---|
+| standalone | 모든 컴포넌트·파이프가 standalone. NgModule 없음 |
+| zoneless | Angular 22 기본값. `zone.js`를 설치하지 않음 |
+| signals | 상태는 `signal`·`computed`·`linkedSignal`, 입력은 `input()`·`model()`, 출력은 `output()` |
+| 데이터 | GET은 `httpResource`·`resource`, 쓰기는 `HttpClient` + `firstValueFrom` |
+| 폼 | Signal Forms(`@angular/forms/signals`의 `form`, `[formField]`, `submit`) |
+| 제어 흐름 | `@if`·`@for`·`@switch`·`@let`, `*ngIf` 없음(ESLint `prefer-control-flow`) |
+| `@defer` | 대시보드 차트(`on viewport`), 활동 피드(`on idle`), 대화상자 속 폼(`when open()`) |
+| 변경 감지 | 모든 컴포넌트 `OnPush`(ESLint로 강제) |
+| 라우팅 | 화면마다 지연 로딩, `withComponentInputBinding`으로 경로·쿼리를 입력으로 받음 |
+
+Angular 22에서 오류 상태인 `resource`의 `value()`를 읽으면 예외가 납니다. 값을 읽을 때는 `hasValue()`를 먼저 확인합니다.
+
+## FSD
+
+두 앱 모두 `src/` 아래를 Feature-Sliced Design v2.1 계층으로 나눕니다: `app` → `pages` → `widgets` → `features` → `entities` → `shared`. 슬라이스는 `index.ts`로만 가져오고, Steiger로 검사합니다(`pnpm lint`). 기능끼리 서로 가져다 쓰면 Steiger가 막으므로, 여러 기능이 쓰는 업무 개체(예: 실사 앱의 보낼함)는 `entities`에 둡니다.
+
+## 개발 서버
+
+```bash
+pnpm dev
+```
+
+- 백오피스 http://localhost:4200, 실사 앱 http://localhost:4200/count/
+- 백오피스 개발 서버가 `/count/`를 실사 앱 개발 서버(4201)로 넘겨(`apps/backoffice/proxy.conf.json`), 두 앱이 같은 출처에서 데이터를 공유합니다.
+- 실사 앱의 서비스 워커는 프로덕션 빌드에서만 켜집니다. 확인하려면 `pnpm preview`(빌드 후 http://localhost:4300).
+
+데모 데이터는 백오피스 머리글의 "데모 초기화"로 처음 상태로 되돌립니다. 시드는 고정 난수로 만들어 언제 초기화해도 구성이 같고, 날짜만 초기화 시점을 기준으로 합니다.
+
+## 테스트
+
+| 명령 | 내용 |
+|---|---|
+| `pnpm test` | 데모 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 탭 간 알림), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
+| `pnpm test:storybook` | 모든 스토리를 Chromium에서 렌더링하고 axe 검사(`@storybook/addon-vitest`, `a11y.test: 'error'`) |
+| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데스크톱·모바일에서 업무 흐름, 동시 수정 충돌, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
+
+컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 같은 DB를 여는 서버를 하나 더 만들면 "다른 탭의 사용자"가 되어 충돌을 재현할 수 있습니다.
+
+## 접근성 점검 (KWCAG 2.2)
+
+axe 통과만으로 끝내지 않고 아래 항목을 직접 점검했습니다.
+
+| 항목 | 적용 |
+|---|---|
+| 5.1.1 대체 텍스트 | 품목 그림은 이름과 시점을 대체 텍스트로, 이름이 옆에 있는 목록 썸네일은 빈 대체 텍스트 |
+| 5.3.1 표 구성 | 표마다 `caption` 또는 이름 있는 영역, 열 제목 `th scope`, 정렬 상태 `aria-sort` |
+| 5.4.1 색 무관 인식 | 재고·실사·동기화 상태는 색과 글자를 함께. 차트는 범례·합계·표 보기 |
+| 5.4.3 명도 대비 | 글자 4.5:1 이상(토큰을 계산해 고름), 차트 색은 팔레트 검증 스크립트로 확인 |
+| 6.1.1 키보드 | 차트는 초점을 받고 좌우 화살표·Home·End·Esc로 날짜별 값을 읽음 |
+| 6.1.2 초점 | 화면을 바꾸면 새 화면 제목으로 초점 이동, 대화상자는 네이티브 `dialog` |
+| 6.1.3 조작 크기 | 백오피스 40px, 실사 앱 48px 이상(장갑 낀 손) |
+| 6.2.1 응답시간 | 알림은 6초 뒤 사라지지만 포인터·초점이 올라가면 멈추고 닫기 버튼 제공 |
+| 6.4.1 건너뛰기 | 두 앱 모두 본문 바로가기 |
+| 6.4.2 제목 | 화면마다 "화면 이름 · 앱 이름", 상세는 품목·작업 이름 |
+| 6.5.3 레이블과 네임 | 숨김 설명을 붙인 버튼은 보이는 글자로 시작하는 `aria-label` |
+| 7.1.1 기본 언어 | `lang="ko"` |
+| 7.3.1 오류 정정 | 칸마다 오류 문구를 `aria-describedby`로 연결하고 `aria-invalid` 표시 |
+| 7.3.2 레이블 | 모든 입력에 보이는 `label` |

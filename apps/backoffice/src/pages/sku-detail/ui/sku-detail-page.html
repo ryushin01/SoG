@@ -1,0 +1,181 @@
+@if (data(); as d) {
+  <nav class="crumbs" aria-label="현재 위치">
+    <ol>
+      <li><a routerLink="/inventory">재고</a></li>
+      <li aria-current="page">{{ d.sku.name }}</li>
+    </ol>
+  </nav>
+
+  <sog-page-header
+    index="01"
+    [label]="d.sku.code"
+    [heading]="d.sku.name"
+    [description]="categoryLabel[d.sku.category] + ' · ' + d.sku.unit + ' 단위'"
+  >
+    <sog-stock-status-badge [status]="d.status" />
+    <button type="button" class="btn btn--primary" (click)="movementOpen.set(true)">
+      입출고 등록
+    </button>
+  </sog-page-header>
+
+  <div class="top">
+    <section class="specimen" aria-labelledby="spec-title">
+      <h2 id="spec-title" class="visually-hidden">품목 개요</h2>
+      <sog-sku-art [sku]="d.sku" [size]="320" />
+      <dl class="spec">
+        <div>
+          <dt>보유</dt>
+          <dd class="display">{{ totals().onHand | num }}</dd>
+        </div>
+        <div>
+          <dt>가용</dt>
+          <dd class="display">{{ totals().available | num }}</dd>
+        </div>
+        <div>
+          <dt>안전 재고</dt>
+          <dd class="display">{{ d.sku.safetyStock | num }}</dd>
+        </div>
+        <div>
+          <dt>재고 금액</dt>
+          <dd>{{ totals().onHand * d.sku.unitCost | won }}</dd>
+        </div>
+        <div>
+          <dt>바코드</dt>
+          <dd class="mono">{{ d.sku.barcode }}</dd>
+        </div>
+        <div>
+          <dt>규격</dt>
+          <dd>
+            {{ d.sku.dimensions[0] }}×{{ d.sku.dimensions[1] }}×{{ d.sku.dimensions[2] }}mm ·
+            {{ d.sku.weight | num }}g
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <sog-edit-sku-form [detail]="d" />
+    </section>
+  </div>
+
+  <section class="block" aria-labelledby="stock-title">
+    <p class="eyebrow"><span>A</span><span>Locations</span></p>
+    <h2 id="stock-title" class="block__title">로케이션별 재고</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="stock-title">
+      <table class="table" [class.stale]="detail.isLoading()">
+        <thead>
+          <tr>
+            <th scope="col">로케이션</th>
+            <th scope="col" class="num">보유</th>
+            <th scope="col" class="num">출고 지시</th>
+            <th scope="col" class="num">가용</th>
+            <th scope="col">버전</th>
+            <th scope="col">최근 변경</th>
+            <th scope="col"><span class="visually-hidden">작업</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (stock of d.stocks; track stock.id) {
+            <tr>
+              <th scope="row" class="mono">{{ stock.location.code }}</th>
+              <td class="num">{{ stock.onHand | num }}</td>
+              <td class="num">{{ stock.reserved | num }}</td>
+              <td class="num">{{ free(stock) | num }}</td>
+              <td class="mono muted">v{{ stock.version }}</td>
+              <td class="muted">
+                {{ stock.updatedAt | dateTime }} · {{ stock.updatedBy | userName }}
+              </td>
+              <td>
+                <button type="button" class="btn btn--small" (click)="adjusting.set(stock)">
+                  조정<span class="visually-hidden">: {{ stock.location.code }}</span>
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="muted">보관 중인 로케이션이 없습니다.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="history-title">
+    <p class="eyebrow"><span>B</span><span>History</span></p>
+    <h2 id="history-title" class="block__title">이동 기록</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="history-title">
+      <table class="table">
+        <thead>
+          <tr>
+            <th scope="col">일시</th>
+            <th scope="col">유형</th>
+            <th scope="col">경로</th>
+            <th scope="col" class="num">수량</th>
+            <th scope="col">사유·참조</th>
+            <th scope="col">처리자</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (m of d.movements; track m.id) {
+            <tr>
+              <td class="nowrap">{{ m.at | dateTime }}</td>
+              <td><sog-movement-type-badge [type]="m.type" /></td>
+              <td class="mono nowrap">
+                @if (m.fromLocationId && m.toLocationId) {
+                  {{ directory.codeOf(m.fromLocationId) }} → {{ directory.codeOf(m.toLocationId) }}
+                } @else {
+                  {{ directory.codeOf(m.fromLocationId ?? m.toLocationId) }}
+                }
+              </td>
+              <td class="num">
+                @if (m.type === 'adjustment' || m.type === 'count') {
+                  {{ m.delta > 0 ? '+' : '−' }}{{ m.qty | num }}
+                } @else {
+                  {{ m.qty | num }}
+                }
+              </td>
+              <td>
+                {{ m.reason }}
+                @if (m.ref) {
+                  <span class="mono muted"> · {{ m.ref }}</span>
+                }
+              </td>
+              <td>{{ m.by | userName }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="muted">이동 기록이 없습니다.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <sog-dialog
+    [open]="adjusting() !== null"
+    (openChange)="!$event && adjusting.set(null)"
+    heading="재고 조정"
+  >
+    @if (adjusting(); as stock) {
+      <sog-adjust-stock-form [stock]="stock" [sku]="d.sku" (done)="adjusting.set(null)" />
+    }
+  </sog-dialog>
+
+  <sog-dialog [(open)]="movementOpen" heading="입출고 등록">
+    @defer (when movementOpen()) {
+      @if (movementOpen()) {
+        <sog-movement-form [skuId]="d.sku.id" (done)="movementOpen.set(false)" />
+      }
+    }
+  </sog-dialog>
+} @else if (detail.error()) {
+  <sog-state-message
+    kind="error"
+    message="품목을 불러오지 못했습니다. 없는 품목이거나 연결에 문제가 있습니다."
+    (retry)="detail.reload()"
+  />
+} @else {
+  <sog-state-message message="품목을 불러오는 중입니다." />
+}

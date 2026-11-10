@@ -1,0 +1,102 @@
+<sog-page-header
+  index="02"
+  label="Cycle counts"
+  heading="재고 실사"
+  description="구역 단위로 실사 작업을 만들어 현장 작업자에게 배정하고, 제출된 결과를 검토해 재고에 반영합니다."
+>
+  <button type="button" class="btn btn--primary" (click)="createOpen.set(true)">
+    새 실사 작업
+  </button>
+</sog-page-header>
+
+<div class="filters" role="group" aria-label="상태로 거르기">
+  @for (f of filters; track f.value) {
+    <button
+      type="button"
+      class="btn btn--small"
+      [class.btn--primary]="filter() === f.value"
+      [attr.aria-pressed]="filter() === f.value"
+      (click)="filter.set(f.value)"
+    >
+      {{ f.label }}
+    </button>
+  }
+</div>
+
+@if (items(); as tasks) {
+  <div
+    class="table-wrap"
+    tabindex="0"
+    role="region"
+    aria-label="실사 작업 목록"
+    [class.stale]="list.isLoading()"
+  >
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">작업</th>
+          <th scope="col">구역</th>
+          <th scope="col">담당</th>
+          <th scope="col">상태</th>
+          <th scope="col">진행</th>
+          <th scope="col" class="num">차이</th>
+          <th scope="col">마감</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (task of tasks; track task.id) {
+          <tr>
+            <td>
+              <a class="task" [routerLink]="['/counts', task.id]">
+                <span class="mono muted">{{ task.code }}</span>
+                <span class="task__title">{{ task.title }}</span>
+              </a>
+              @if (task.blind) {
+                <span class="tag">블라인드</span>
+              }
+            </td>
+            <td>{{ zoneLabel[task.zone] }}</td>
+            <td>{{ task.assignee.name }}</td>
+            <td><sog-count-status-badge [status]="task.status" /></td>
+            <td>
+              <sog-count-progress
+                [counted]="task.countedCount"
+                [total]="task.lineCount"
+                [name]="task.code + ' 진행률'"
+              />
+            </td>
+            <td class="num">{{ task.varianceCount }}건</td>
+            <td class="nowrap" [class.overdue]="overdue(task)">
+              {{ task.dueAt | date }}
+              @if (overdue(task)) {
+                <span> · 지남</span>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="7">
+              <sog-state-message kind="empty" message="이 상태의 실사 작업이 없습니다." />
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else if (list.error()) {
+  <sog-state-message
+    kind="error"
+    message="실사 작업을 불러오지 못했습니다."
+    (retry)="list.reload()"
+  />
+} @else {
+  <sog-state-message message="실사 작업을 불러오는 중입니다." />
+}
+
+<sog-dialog [(open)]="createOpen" heading="새 실사 작업">
+  @defer (when createOpen()) {
+    @if (createOpen()) {
+      <sog-create-count-form (created)="created($event)" />
+    }
+  }
+</sog-dialog>

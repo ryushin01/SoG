@@ -1,0 +1,138 @@
+<form class="stack" novalidate (submit)="onSubmit($event)" aria-labelledby="edit-sku-title">
+  <h2 id="edit-sku-title" class="title">기본 정보</h2>
+
+  @if (incoming(); as latest) {
+    <div class="notice" role="status">
+      <p>
+        <strong>{{ session.nameOf(latest.updatedBy) }}</strong
+        >님이 이 품목을 방금 수정했습니다. 저장하면 충돌이 날 수 있습니다.
+      </p>
+      <button type="button" class="btn btn--small" (click)="load(latest)">
+        최신 내용 불러오기
+      </button>
+    </div>
+  }
+
+  @if (conflict(); as latest) {
+    <div class="conflict" role="alert" aria-labelledby="conflict-title">
+      <h3 id="conflict-title" class="conflict__title">저장하지 못했습니다: 동시 수정 충돌</h3>
+      <p>
+        {{ session.nameOf(latest.updatedBy) }}님이 먼저 저장했습니다(버전 {{ base()?.version }} →
+        {{ latest.version }}). 어느 값을 남길지 골라 주세요.
+      </p>
+      @if (conflictRows().length > 0) {
+        <table class="table">
+          <caption class="visually-hidden">
+            달라진 항목
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">항목</th>
+              <th scope="col">내 입력</th>
+              <th scope="col">최신 값</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of conflictRows(); track row.label) {
+              <tr>
+                <th scope="row">{{ row.label }}</th>
+                <td>{{ row.mine }}</td>
+                <td>{{ row.theirs }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p>다른 항목만 바뀌어 내 입력과 겹치는 값은 없습니다.</p>
+      }
+      <div class="cluster">
+        <button type="button" class="btn btn--primary btn--small" (click)="keepMine()">
+          내 입력으로 다시 저장
+        </button>
+        <button type="button" class="btn btn--small" (click)="load(latest)">
+          최신 값 불러오기
+        </button>
+      </div>
+    </div>
+  }
+
+  <div class="grid">
+    <div class="field field--wide">
+      <label class="field__label" [for]="id('name')">품목명</label>
+      <input
+        class="input"
+        [id]="id('name')"
+        [formField]="form.name"
+        autocomplete="off"
+        [attr.aria-invalid]="form.name().touched() && form.name().invalid()"
+        [attr.aria-describedby]="id('name-error')"
+      />
+      <sog-field-errors [state]="form.name()" [id]="id('name-error')" />
+    </div>
+
+    <div class="field">
+      <label class="field__label" [for]="id('safety')">안전 재고</label>
+      <input
+        class="input"
+        type="number"
+        inputmode="numeric"
+        [id]="id('safety')"
+        [formField]="form.safetyStock"
+        [attr.aria-invalid]="form.safetyStock().touched() && form.safetyStock().invalid()"
+        [attr.aria-describedby]="id('safety-hint') + ' ' + id('safety-error')"
+      />
+      <p class="field__hint" [id]="id('safety-hint')">이보다 적으면 부족 재고로 표시합니다.</p>
+      <sog-field-errors [state]="form.safetyStock()" [id]="id('safety-error')" />
+    </div>
+
+    <div class="field">
+      <label class="field__label" [for]="id('cost')">단가(원)</label>
+      <input
+        class="input"
+        type="number"
+        inputmode="numeric"
+        [id]="id('cost')"
+        [formField]="form.unitCost"
+        [attr.aria-invalid]="form.unitCost().touched() && form.unitCost().invalid()"
+        [attr.aria-describedby]="id('cost-error')"
+      />
+      <sog-field-errors [state]="form.unitCost()" [id]="id('cost-error')" />
+    </div>
+
+    <div class="field field--wide">
+      <label class="field__label" [for]="id('desc')">설명</label>
+      <textarea
+        class="textarea"
+        [id]="id('desc')"
+        [formField]="form.description"
+        [attr.aria-invalid]="form.description().touched() && form.description().invalid()"
+        [attr.aria-describedby]="id('desc-error')"
+      ></textarea>
+      <sog-field-errors [state]="form.description()" [id]="id('desc-error')" />
+    </div>
+  </div>
+
+  @if (serverError(); as message) {
+    <p class="field__error" role="alert">{{ message }}</p>
+  }
+
+  <div class="actions">
+    <p class="muted version">
+      버전 <span class="mono">v{{ base()?.version }}</span> ·
+      {{ session.nameOf(base()?.updatedBy) }}
+    </p>
+    <div class="cluster">
+      <button
+        type="button"
+        class="btn"
+        [disabled]="!dirty() || lock.pending()"
+        (click)="base() && load(base()!)"
+      >
+        되돌리기
+      </button>
+      <button type="submit" class="btn btn--primary" [disabled]="lock.pending()">
+        {{ lock.pending() ? '저장 중…' : '저장' }}
+      </button>
+    </div>
+  </div>
+</form>

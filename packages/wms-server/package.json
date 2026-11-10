@@ -1,0 +1,22 @@
+{
+  "name": "@sog/wms-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@sog/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.8",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

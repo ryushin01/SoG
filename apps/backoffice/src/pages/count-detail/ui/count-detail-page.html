@@ -1,0 +1,191 @@
+@if (data(); as d) {
+  <nav class="crumbs" aria-label="현재 위치">
+    <ol>
+      <li><a routerLink="/counts">재고 실사</a></li>
+      <li aria-current="page">{{ d.task.code }}</li>
+    </ol>
+  </nav>
+
+  <sog-page-header index="02" [label]="d.task.code" [heading]="d.task.title">
+    <sog-review-actions [task]="d.task" (changed)="detail.reload()" />
+  </sog-page-header>
+
+  <dl class="meta">
+    <div>
+      <dt>상태</dt>
+      <dd><sog-count-status-badge [status]="d.task.status" /></dd>
+    </div>
+    <div>
+      <dt>구역</dt>
+      <dd>{{ zoneLabel[d.task.zone] }}</dd>
+    </div>
+    <div>
+      <dt>담당</dt>
+      <dd>
+        {{ d.task.assignee.name }} <span class="muted">{{ d.task.assignee.team }}</span>
+      </dd>
+    </div>
+    <div>
+      <dt>방식</dt>
+      <dd>{{ d.task.blind ? '블라인드(장부 숨김)' : '장부 공개' }}</dd>
+    </div>
+    <div>
+      <dt>마감</dt>
+      <dd>{{ d.task.dueAt | date }}</dd>
+    </div>
+    <div>
+      <dt>진행</dt>
+      <dd><sog-count-progress [counted]="d.task.countedCount" [total]="d.task.lineCount" /></dd>
+    </div>
+  </dl>
+
+  <section class="figures" aria-labelledby="figures-title">
+    <h2 id="figures-title" class="visually-hidden">실사 결과 요약</h2>
+    <div class="figure">
+      <p class="figure__label">부족</p>
+      <p class="display figure__value">{{ summary().shortage }}</p>
+    </div>
+    <div class="figure">
+      <p class="figure__label">초과</p>
+      <p class="display figure__value">{{ summary().overage }}</p>
+    </div>
+    <div class="figure">
+      <p class="figure__label">차이 금액</p>
+      <p class="figure__money" [class.neg]="summary().varianceValue < 0">
+        {{ summary().varianceValue | won }}
+      </p>
+    </div>
+    <div class="figure">
+      <p class="figure__label">실사 중 이동</p>
+      <p class="display figure__value">{{ summary().moved }}</p>
+    </div>
+  </section>
+
+  @if (d.task.status === 'in_progress') {
+    <p class="live" role="status">
+      <span class="live__dot" aria-hidden="true"></span>
+      {{ d.task.assignee.name }}님이 현장 앱에서 세는 대로 이 표가 바뀝니다.
+    </p>
+  }
+
+  <div class="filters" role="group" aria-label="항목 거르기">
+    @for (f of filters; track f.value) {
+      <button
+        type="button"
+        class="btn btn--small"
+        [class.btn--primary]="filter() === f.value"
+        [attr.aria-pressed]="filter() === f.value"
+        (click)="filter.set(f.value)"
+      >
+        {{ f.label }}
+      </button>
+    }
+  </div>
+
+  <div
+    class="table-wrap"
+    tabindex="0"
+    role="region"
+    aria-label="실사 항목"
+    [class.stale]="detail.isLoading()"
+  >
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">로케이션</th>
+          <th scope="col">품목</th>
+          <th scope="col" class="num">장부</th>
+          <th scope="col" class="num">실사</th>
+          <th scope="col" class="num">차이</th>
+          <th scope="col" class="num">실사 중 이동</th>
+          <th scope="col" class="num">승인 시 재고</th>
+          <th scope="col">센 사람</th>
+          @if (reviewable()) {
+            <th scope="col"><span class="visually-hidden">작업</span></th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (line of lines(); track line.id) {
+          <tr [class.fresh]="fresh().has(line.id)">
+            <th scope="row" class="mono">{{ line.location.code }}</th>
+            <td>
+              <a class="item" [routerLink]="['/inventory', line.sku.id]">{{ line.sku.name }}</a>
+              <p class="mono muted">{{ line.sku.code }}</p>
+              @if (line.note) {
+                <p class="note">메모: {{ line.note }}</p>
+              }
+            </td>
+            <td class="num">{{ line.expectedQty | num }}</td>
+            <td class="num">
+              @switch (line.status) {
+                @case ('pending') {
+                  <span class="muted">미실사</span>
+                }
+                @case ('recount') {
+                  <span class="badge badge--warn">재실사 요청</span>
+                }
+                @default {
+                  {{ line.countedQty | num }}
+                }
+              }
+            </td>
+            <td class="num">
+              @if (variance(line); as v) {
+                <span class="delta" [class.delta--neg]="v < 0" [class.delta--pos]="v > 0"
+                  >{{ v | delta
+                  }}<span class="visually-hidden">{{ v < 0 ? ' 부족' : ' 초과' }}</span></span
+                >
+              } @else if (line.countedQty !== null) {
+                <span class="muted">일치</span>
+              } @else {
+                —
+              }
+            </td>
+            <td class="num">
+              {{ line.movedSinceSnapshot === 0 ? '—' : (line.movedSinceSnapshot | delta) }}
+            </td>
+            <td class="num">{{ settled(line) | num }}</td>
+            <td class="nowrap">
+              @if (line.countedAt) {
+                {{ line.countedBy | userName }}
+                <span class="muted">· {{ line.countedAt | ago }}</span>
+              } @else {
+                —
+              }
+            </td>
+            @if (reviewable()) {
+              <td>
+                @if (line.status === 'counted') {
+                  <sog-recount-button
+                    [taskId]="d.task.id"
+                    [line]="line"
+                    (changed)="detail.reload()"
+                  />
+                }
+              </td>
+            }
+          </tr>
+        } @empty {
+          <tr>
+            <td [attr.colspan]="reviewable() ? 9 : 8">
+              <sog-state-message kind="empty" message="해당하는 항목이 없습니다." />
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="foot muted">
+    승인 시 재고 = 실사 수량 + 센 뒤 일어난 입출고. 실사 도중 물건이 들고 나도 차이가 두 번 반영되지
+    않습니다.
+  </p>
+} @else if (detail.error()) {
+  <sog-state-message
+    kind="error"
+    message="실사 작업을 불러오지 못했습니다."
+    (retry)="detail.reload()"
+  />
+} @else {
+  <sog-state-message message="실사 작업을 불러오는 중입니다." />
+}

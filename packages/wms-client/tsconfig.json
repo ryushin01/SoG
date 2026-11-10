@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "experimentalDecorators": true,
+    "verbatimModuleSyntax": false,
+    "paths": {
+      "@sog/domain": ["../domain/src/index.ts"],
+      "@sog/wms-server": ["../wms-server/src/index.ts"]
+    }
+  },
+  "include": ["src", "vitest.config.ts"]
+}

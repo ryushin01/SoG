@@ -1,0 +1,71 @@
+<form class="count" novalidate (submit)="onSubmit($event)">
+  <div class="count__head">
+    <label class="label" for="count-qty"
+      >센 수량 <span class="muted">({{ line().sku.unit }})</span></label
+    >
+    @if (!blind()) {
+      <p class="caption">장부 {{ line().expectedQty }}</p>
+    } @else {
+      <p class="caption">블라인드 실사</p>
+    }
+  </div>
+
+  <div class="stepper">
+    <button type="button" class="btn stepper__btn" (click)="step(-1)" [disabled]="model().qty <= 0">
+      <span aria-hidden="true">−</span><span class="visually-hidden">1 빼기</span>
+    </button>
+    <input
+      id="count-qty"
+      class="stepper__input"
+      type="number"
+      inputmode="numeric"
+      [formField]="form.qty"
+      [attr.aria-invalid]="form.qty().touched() && form.qty().invalid()"
+      aria-describedby="count-qty-error count-qty-diff"
+    />
+    <button type="button" class="btn stepper__btn" (click)="step(1)">
+      <span aria-hidden="true">+</span><span class="visually-hidden">1 더하기</span>
+    </button>
+  </div>
+  <div class="quick" role="group" aria-label="빠른 입력">
+    <button type="button" class="btn quick__btn" (click)="step(-10)">−10</button>
+    <button type="button" class="btn quick__btn" (click)="step(10)">+10</button>
+  </div>
+  <p id="count-qty-diff" class="hint" aria-live="polite">
+    @if (differs()) {
+      장부와 {{ model().qty - line().expectedQty > 0 ? '+' : ''
+      }}{{ model().qty - line().expectedQty }} 차이가 납니다. 다시 한 번 확인해 주세요.
+    }
+  </p>
+  <div id="count-qty-error">
+    @if (form.qty().touched() && form.qty().invalid()) {
+      @for (error of form.qty().errors(); track error.kind) {
+        <p class="error">{{ error.message }}</p>
+      }
+    }
+  </div>
+
+  <div>
+    <label class="label" for="count-note">메모 <span class="muted">(선택)</span></label>
+    <input
+      id="count-note"
+      class="input"
+      autocomplete="off"
+      placeholder="파손, 라벨 불일치 등"
+      [formField]="form.note"
+      aria-describedby="count-note-error"
+    />
+    <div id="count-note-error">
+      @if (form.note().touched() && form.note().invalid()) {
+        <p class="error">{{ form.note().errors()[0]?.message }}</p>
+      }
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn--solid btn--block" [disabled]="lock.pending()">
+    {{ lock.pending() ? '저장 중…' : network.online() ? '저장하고 다음' : '기기에 저장하고 다음' }}
+  </button>
+  @if (!network.online()) {
+    <p class="hint">오프라인입니다. 연결되면 보낼함에서 자동으로 보냅니다.</p>
+  }
+</form>

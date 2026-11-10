@@ -1,0 +1,19 @@
+{
+  "name": "SoG 재고 실사",
+  "short_name": "SoG 실사",
+  "description": "창고 현장 작업자용 재고 실사 앱",
+  "lang": "ko",
+  "id": "/count/",
+  "start_url": "/count/",
+  "scope": "/count/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fefdfc",
+  "theme_color": "#fefdfc",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

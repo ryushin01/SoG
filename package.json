@@ -1,0 +1,46 @@
+{
+  "name": "sog",
+  "private": true,
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "e2e": "turbo run e2e --concurrency=1",
+    "test:storybook": "turbo run test:storybook --concurrency=1",
+    "site": "node scripts/assemble-site.mjs",
+    "preview": "pnpm build && pnpm site && node scripts/serve-site.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@feature-sliced/steiger-plugin": "^0.8.2",
+    "@types/node": "^26.6.6",
+    "angular-eslint": "^22.6.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-storybook": "10.6.6",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "steiger": "^0.10.0",
+    "turbo": "^2.11.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1"
+  },
+  "lint-staged": {
+    "*.{ts,mts,js,mjs}": [
+      "eslint --fix --max-warnings 0",
+      "prettier --write"
+    ],
+    "*.{html,css,json,yml,yaml}": "prettier --write"
+  }
+}

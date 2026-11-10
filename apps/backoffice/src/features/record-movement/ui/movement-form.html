@@ -1,0 +1,147 @@
+<form class="stack" novalidate (submit)="onSubmit($event)">
+  <fieldset class="types">
+    <legend class="field__label">유형</legend>
+    @for (kind of kinds; track kind) {
+      <label class="type" [class.type--on]="model().type === kind">
+        <input
+          type="radio"
+          name="movement-type"
+          [value]="kind"
+          [checked]="model().type === kind"
+          (change)="setType(kind)"
+        />
+        {{ labels[kind] }}
+      </label>
+    }
+  </fieldset>
+
+  @if (!skuId()) {
+    <div class="field">
+      <label class="field__label" [for]="id('sku')">품목</label>
+      <select
+        class="select"
+        [id]="id('sku')"
+        [formField]="form.skuId"
+        [attr.aria-invalid]="form.skuId().touched() && form.skuId().invalid()"
+        [attr.aria-describedby]="id('sku-error')"
+      >
+        <option value="">품목 선택</option>
+        @for (sku of (skus.hasValue() ? skus.value() : undefined)?.items ?? []; track sku.id) {
+          <option [value]="sku.id">
+            {{ sku.name }} ({{ sku.code }}) · 가용 {{ sku.available }}
+          </option>
+        }
+      </select>
+      <sog-field-errors [state]="form.skuId()" [id]="id('sku-error')" />
+    </div>
+  }
+
+  <div class="grid">
+    @if (model().type !== 'receipt') {
+      <div class="field">
+        <label class="field__label" [for]="id('from')">출발 로케이션</label>
+        <select
+          class="select"
+          [id]="id('from')"
+          [formField]="form.from"
+          [attr.aria-invalid]="form.from().touched() && form.from().invalid()"
+          [attr.aria-describedby]="id('from-error')"
+        >
+          <option value="">선택</option>
+          @for (source of sources(); track source.id) {
+            <option [value]="source.id" [disabled]="source.free === 0">
+              {{ source.code }} · 가용 {{ source.free }}
+            </option>
+          }
+        </select>
+        <sog-field-errors [state]="form.from()" [id]="id('from-error')" />
+      </div>
+    }
+
+    @if (model().type !== 'shipment') {
+      <div class="field">
+        <label class="field__label" [for]="id('to')">도착 로케이션</label>
+        <select
+          class="select"
+          [id]="id('to')"
+          [formField]="form.to"
+          [attr.aria-invalid]="form.to().touched() && form.to().invalid()"
+          [attr.aria-describedby]="id('to-error')"
+        >
+          <option value="">선택</option>
+          @for (zone of directory.zones(); track zone.code) {
+            <optgroup [label]="zone.name">
+              @for (location of directory.inZone(zone.code); track location.id) {
+                <option [value]="location.id" [disabled]="location.id === model().from">
+                  {{ location.code }}
+                </option>
+              }
+            </optgroup>
+          }
+        </select>
+        <sog-field-errors [state]="form.to()" [id]="id('to-error')" />
+      </div>
+    }
+
+    <div class="field">
+      <label class="field__label" [for]="id('qty')">수량</label>
+      <input
+        class="input"
+        type="number"
+        inputmode="numeric"
+        [id]="id('qty')"
+        [formField]="form.qty"
+        [attr.aria-invalid]="form.qty().touched() && form.qty().invalid()"
+        [attr.aria-describedby]="id('qty-hint') + ' ' + id('qty-error')"
+      />
+      <p class="field__hint" [id]="id('qty-hint')">
+        @if (model().type === 'receipt') {
+          받은 수량을 적습니다.
+        } @else if (model().from) {
+          최대 {{ maxQty() }}개까지 보낼 수 있습니다.
+        } @else {
+          출발 로케이션을 고르면 가용 재고가 보입니다.
+        }
+      </p>
+      <sog-field-errors [state]="form.qty()" [id]="id('qty-error')" />
+    </div>
+
+    @if (model().type !== 'transfer') {
+      <div class="field">
+        <label class="field__label" [for]="id('ref')"
+          >참조 번호 <span class="muted">(선택)</span></label
+        >
+        <input
+          class="input"
+          [id]="id('ref')"
+          [formField]="form.ref"
+          autocomplete="off"
+          placeholder="PO-2611-0042"
+          [attr.aria-describedby]="id('ref-error')"
+        />
+        <sog-field-errors [state]="form.ref()" [id]="id('ref-error')" />
+      </div>
+    }
+
+    <div class="field wide">
+      <label class="field__label" [for]="id('reason')">사유</label>
+      <input
+        class="input"
+        [id]="id('reason')"
+        [formField]="form.reason"
+        autocomplete="off"
+        [attr.aria-invalid]="form.reason().touched() && form.reason().invalid()"
+        [attr.aria-describedby]="id('reason-error')"
+      />
+      <sog-field-errors [state]="form.reason()" [id]="id('reason-error')" />
+    </div>
+  </div>
+
+  @if (serverError(); as message) {
+    <p class="field__error" role="alert">{{ message }}</p>
+  }
+
+  <button type="submit" class="btn btn--primary" [disabled]="lock.pending()">
+    {{ lock.pending() ? '등록 중…' : labels[model().type] + ' 등록' }}
+  </button>
+</form>

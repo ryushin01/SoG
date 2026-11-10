@@ -1,0 +1,177 @@
+<sog-page-header
+  index="01"
+  label="Inventory"
+  heading="재고"
+  description="품목별 보유·가용 수량과 상태를 봅니다. 다른 탭에서 입출고가 일어나면 표가 바로 바뀝니다."
+>
+  <button type="button" class="btn btn--primary" (click)="movementOpen.set(true)">
+    입출고 등록
+  </button>
+</sog-page-header>
+
+<search class="filters">
+  <h2 class="visually-hidden">재고 검색</h2>
+  <div class="field filters__q">
+    <label class="field__label" for="inv-q">검색</label>
+    <input
+      id="inv-q"
+      class="input"
+      type="search"
+      placeholder="품목명, 코드, 바코드"
+      autocomplete="off"
+      [value]="qFilter()"
+      (input)="qFilter.set(value($event))"
+    />
+  </div>
+  <div class="field">
+    <label class="field__label" for="inv-category">분류</label>
+    <select id="inv-category" class="select" (change)="categoryFilter.set($any(value($event)))">
+      <option value="" [selected]="!categoryFilter()">전체</option>
+      @for (entry of categories; track entry[0]) {
+        <option [value]="entry[0]" [selected]="categoryFilter() === entry[0]">
+          {{ entry[1] }}
+        </option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label class="field__label" for="inv-status">상태</label>
+    <select id="inv-status" class="select" (change)="statusFilter.set($any(value($event)))">
+      <option value="" [selected]="!statusFilter()">전체</option>
+      @for (entry of statuses; track entry[0]) {
+        <option [value]="entry[0]" [selected]="statusFilter() === entry[0]">{{ entry[1] }}</option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label class="field__label" for="inv-zone">구역</label>
+    <select id="inv-zone" class="select" (change)="zoneFilter.set($any(value($event)))">
+      <option value="" [selected]="!zoneFilter()">전체</option>
+      @for (z of directory.zones(); track z.code) {
+        <option [value]="z.code" [selected]="zoneFilter() === z.code">{{ z.name }}</option>
+      }
+    </select>
+  </div>
+  @if (filtered()) {
+    <button type="button" class="btn btn--quiet filters__reset" (click)="reset()">
+      필터 지우기
+    </button>
+  }
+</search>
+
+@if (rows(); as result) {
+  <p class="count" role="status">
+    {{ result.total }}개 품목 중
+    {{ (result.page - 1) * result.size + (result.items.length ? 1 : 0) }}–{{
+      (result.page - 1) * result.size + result.items.length
+    }}
+    @if (list.isLoading()) {
+      <span class="muted"> · 갱신 중</span>
+    }
+  </p>
+  <div
+    class="table-wrap"
+    tabindex="0"
+    role="region"
+    aria-labelledby="inv-caption"
+    [class.stale]="list.isLoading()"
+  >
+    <table class="table">
+      <caption id="inv-caption" class="visually-hidden">
+        재고 목록, 열 제목 버튼으로 정렬
+      </caption>
+      <thead>
+        <tr>
+          @for (col of columns.slice(0, 1); track col.key) {
+            <th scope="col" [attr.aria-sort]="ariaSort(col.key)">
+              <button type="button" class="sort" (click)="sortBy(col.key)">
+                {{ col.label
+                }}<span class="sort__icon" aria-hidden="true">{{
+                  ariaSort(col.key) === 'ascending'
+                    ? '↑'
+                    : ariaSort(col.key) === 'descending'
+                      ? '↓'
+                      : '↕'
+                }}</span>
+              </button>
+            </th>
+          }
+          <th scope="col">분류</th>
+          @for (col of columns.slice(1); track col.key) {
+            <th scope="col" [class.num]="col.numeric" [attr.aria-sort]="ariaSort(col.key)">
+              <button type="button" class="sort" (click)="sortBy(col.key)">
+                {{ col.label
+                }}<span class="sort__icon" aria-hidden="true">{{
+                  ariaSort(col.key) === 'ascending'
+                    ? '↑'
+                    : ariaSort(col.key) === 'descending'
+                      ? '↓'
+                      : '↕'
+                }}</span>
+              </button>
+            </th>
+            @if (col.key === 'available') {
+              <th scope="col" class="num">안전 재고</th>
+              <th scope="col">상태</th>
+            }
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (sku of result.items; track sku.id) {
+          <tr>
+            <td>
+              <div class="item">
+                <sog-sku-art class="item__art" [sku]="sku" [size]="44" [decorative]="true" />
+                <div>
+                  <a class="item__name" [routerLink]="['/inventory', sku.id]">{{ sku.name }}</a>
+                  <p class="mono muted">{{ sku.code }}</p>
+                </div>
+              </div>
+            </td>
+            <td>{{ categoryLabel(sku.category) }}</td>
+            <td class="num">
+              {{ sku.onHand | num }} <span class="muted">{{ sku.unit }}</span>
+            </td>
+            <td class="num">{{ sku.available | num }}</td>
+            <td class="num">{{ sku.safetyStock | num }}</td>
+            <td><sog-stock-status-badge [status]="sku.status" /></td>
+            <td class="num">{{ sku.onHand * sku.unitCost | won }}</td>
+            <td class="muted nowrap">{{ sku.updatedAt | ago }}</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="8">
+              <sog-state-message kind="empty" message="조건에 맞는 품목이 없습니다." />
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <sog-pagination
+    [page]="result.page"
+    [total]="result.total"
+    [size]="size"
+    label="재고 목록 페이지"
+    (pageChange)="page.set($event)"
+  />
+} @else if (list.error()) {
+  <sog-state-message
+    kind="error"
+    message="재고 목록을 불러오지 못했습니다."
+    (retry)="list.reload()"
+  />
+} @else {
+  <sog-state-message message="재고 목록을 불러오는 중입니다." />
+}
+
+<sog-dialog [(open)]="movementOpen" heading="입출고 등록">
+  @defer (when movementOpen()) {
+    @if (movementOpen()) {
+      <sog-movement-form (done)="movementOpen.set(false)" />
+    }
+  } @loading {
+    <sog-state-message message="입력 양식을 불러오는 중입니다." />
+  }
+</sog-dialog>

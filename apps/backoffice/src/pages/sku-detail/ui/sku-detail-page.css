@@ -1,0 +1,81 @@
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+
+.crumbs li + li::before {
+  content: '/';
+  margin-inline-end: 0.5rem;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(16rem, 2fr) minmax(0, 3fr);
+  gap: 1.5rem;
+  margin-block-end: 3rem;
+}
+
+.specimen {
+  display: grid;
+  align-content: start;
+  gap: 1.25rem;
+}
+
+.spec {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--ink);
+}
+
+.spec > div {
+  padding: 0.75rem 0.75rem 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.spec dt {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.spec dd {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.spec dd.display {
+  font-size: 2.25rem;
+}
+
+.block {
+  display: grid;
+  gap: 1rem;
+  margin-block-end: 3rem;
+}
+
+.block__title {
+  font-size: 1.25rem;
+}
+
+.stale {
+  opacity: 0.6;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+@media (max-width: 60rem) {
+  .top {
+    grid-template-columns: 1fr;
+  }
+}

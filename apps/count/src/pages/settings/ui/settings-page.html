@@ -1,0 +1,99 @@
+<div class="page">
+  <p class="caption">Outbox · Settings</p>
+  <h1 id="page-title" tabindex="-1" class="title">보낼함·설정</h1>
+
+  <section class="block" aria-labelledby="net-title">
+    <h2 id="net-title" class="block__title">연결</h2>
+    <p class="status">
+      <span class="dot" [class.dot--off]="!network.online()" aria-hidden="true"></span>
+      {{
+        network.online()
+          ? '온라인: 저장하면 바로 보냅니다.'
+          : '오프라인: 저장한 수량은 기기에 남습니다.'
+      }}
+    </p>
+    <label class="switch">
+      <input
+        type="checkbox"
+        role="switch"
+        [checked]="network.simulatedOffline()"
+        (change)="toggleOffline($event)"
+        aria-describedby="offline-hint"
+      />
+      <span>오프라인 모의</span>
+    </label>
+    <p id="offline-hint" class="hint">
+      데모 서버는 브라우저 안에 있어 실제로는 끊기지 않습니다. 켜면 창고 음영 지역처럼 요청이
+      실패하고, 끄면 보낼함이 자동으로 비워집니다.
+    </p>
+  </section>
+
+  <section class="block" aria-labelledby="outbox-title">
+    <h2 id="outbox-title" class="block__title">
+      보낼함 <span class="mono muted">{{ outbox.items().length }}</span>
+    </h2>
+    @if (outbox.items().length === 0) {
+      <p class="muted">보낼 기록이 없습니다. 센 수량은 모두 서버에 반영되었습니다.</p>
+    } @else {
+      <ul class="items">
+        @for (item of outbox.items(); track item.id) {
+          <li class="item" [class.item--bad]="item.state === 'conflict' || item.state === 'failed'">
+            <div class="item__main">
+              <p class="item__name">{{ item.skuName }}</p>
+              <p class="caption">
+                {{ item.locationCode }} · {{ item.countedQty }}개 · {{ item.createdAt | ago }}
+              </p>
+              @if (item.message) {
+                <p class="item__msg">{{ item.message }}</p>
+              }
+            </div>
+            <div class="item__actions">
+              @switch (item.state) {
+                @case ('conflict') {
+                  <a class="btn" [routerLink]="['/tasks', item.taskId, 'lines', item.lineId]"
+                    >다시 세기<span class="visually-hidden">: {{ item.skuName }}</span></a
+                  >
+                }
+                @case ('failed') {
+                  <button type="button" class="btn" (click)="outbox.retry(item.id)">
+                    다시 보내기<span class="visually-hidden">: {{ item.skuName }}</span>
+                  </button>
+                }
+                @case ('sending') {
+                  <span class="pill pill--warn">보내는 중</span>
+                }
+                @default {
+                  <span class="pill pill--stone">대기</span>
+                }
+              }
+            </div>
+          </li>
+        }
+      </ul>
+      <button
+        type="button"
+        class="btn btn--block"
+        [disabled]="!network.online() || outbox.syncing()"
+        (click)="outbox.flush()"
+      >
+        {{ outbox.syncing() ? '보내는 중…' : '지금 보내기' }}
+      </button>
+    }
+  </section>
+
+  <section class="block" aria-labelledby="who-title">
+    <h2 id="who-title" class="block__title">작업자</h2>
+    <p>
+      {{ session.operator()?.name }} <span class="muted">· {{ session.operator()?.team }}</span>
+    </p>
+    <button type="button" class="btn" (click)="switchOperator()">작업자 바꾸기</button>
+  </section>
+
+  <section class="block" aria-labelledby="install-title">
+    <h2 id="install-title" class="block__title">앱으로 설치</h2>
+    <p class="hint">
+      브라우저 메뉴의 "홈 화면에 추가"나 "앱 설치"를 누르면 아이콘으로 열 수 있습니다. 설치하면 앱
+      파일이 기기에 저장되어 연결이 끊긴 곳에서도 열립니다.
+    </p>
+  </section>
+</div>

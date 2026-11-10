@@ -1,0 +1,184 @@
+/** 데모 서버(/api)의 요청·응답 형식. 두 앱의 API 클라이언트가 이 타입으로 통신합니다. */
+import type {
+  Activity,
+  CountLine,
+  CountTask,
+  Location,
+  Movement,
+  Sku,
+  SkuCategory,
+  StockLevel,
+  User,
+  Zone,
+  ZoneCode,
+} from './types';
+import type { StockStatus } from './rules';
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface SkuSummary extends Sku {
+  onHand: number;
+  reserved: number;
+  available: number;
+  locationCount: number;
+  status: StockStatus;
+}
+
+export type SkuSort = 'code' | 'name' | 'onHand' | 'available' | 'value' | 'updatedAt';
+
+export interface SkuQuery {
+  q?: string;
+  category?: SkuCategory | '';
+  status?: StockStatus | '';
+  zone?: ZoneCode | '';
+  sort?: SkuSort;
+  dir?: 'asc' | 'desc';
+  page?: number;
+  size?: number;
+}
+
+export interface StockWithLocation extends StockLevel {
+  location: Location;
+}
+
+export interface SkuDetail {
+  sku: Sku;
+  stocks: StockWithLocation[];
+  movements: Movement[];
+  status: StockStatus;
+}
+
+export interface SkuPatch {
+  name?: string;
+  safetyStock?: number;
+  unitCost?: number;
+  description?: string;
+}
+
+export interface AdjustRequest {
+  /** 실물 확인 후의 수량 */
+  onHand: number;
+  reason: string;
+}
+
+export type MovementRequest =
+  | {
+      type: 'receipt';
+      skuId: string;
+      toLocationId: string;
+      qty: number;
+      reason: string;
+      ref?: string;
+    }
+  | {
+      type: 'shipment';
+      skuId: string;
+      fromLocationId: string;
+      qty: number;
+      reason: string;
+      ref?: string;
+    }
+  | {
+      type: 'transfer';
+      skuId: string;
+      fromLocationId: string;
+      toLocationId: string;
+      qty: number;
+      reason: string;
+    };
+
+export interface DashboardKpis {
+  skuCount: number;
+  totalUnits: number;
+  inventoryValue: number;
+  lowStock: number;
+  outOfStock: number;
+  openCounts: number;
+  pendingReview: number;
+  /** 최근 승인된 실사의 재고 정확도(%) */
+  accuracy: number | null;
+  /** 최근 14일 일별 입고·출고 수량 */
+  flow: { date: string; receipt: number; shipment: number }[];
+  /** 구역별 재고 금액 */
+  zoneValue: { zone: ZoneCode; value: number; units: number }[];
+}
+
+export interface CountLineView extends CountLine {
+  sku: Pick<
+    Sku,
+    'id' | 'code' | 'name' | 'barcode' | 'unit' | 'unitCost' | 'shape' | 'hue' | 'category'
+  >;
+  location: Location;
+  /** 작업을 만든 뒤 이 재고에 일어난 이동의 순증감 */
+  movedSinceSnapshot: number;
+  /** 실사 시점 뒤에 일어난 이동의 순증감. 승인할 때 반영할 수량을 계산합니다. */
+  movedSinceCount: number;
+}
+
+export interface CountTaskSummary extends CountTask {
+  assignee: User;
+  lineCount: number;
+  countedCount: number;
+  recountCount: number;
+  varianceCount: number;
+}
+
+export interface CountTaskDetail {
+  task: CountTaskSummary;
+  lines: CountLineView[];
+}
+
+export interface CreateCountRequest {
+  title: string;
+  zone: ZoneCode;
+  /** 비우면 구역의 모든 재고를 대상으로 합니다. */
+  locationIds?: string[];
+  assigneeId: string;
+  blind: boolean;
+  dueAt: string;
+}
+
+export interface SubmitCountLineRequest {
+  countedQty: number;
+  note?: string;
+}
+
+export interface Reference {
+  zones: Zone[];
+  locations: Location[];
+  users: User[];
+}
+
+export interface ApiError {
+  code:
+    | 'NOT_FOUND'
+    | 'VALIDATION'
+    | 'PRECONDITION_REQUIRED'
+    | 'VERSION_CONFLICT'
+    | 'INSUFFICIENT_STOCK'
+    | 'INVALID_STATE'
+    | 'NETWORK';
+  message: string;
+  /** VERSION_CONFLICT일 때 서버의 최신 자원 */
+  current?: unknown;
+}
+
+export interface ActivityPage {
+  items: Activity[];
+}
+
+/** 다른 탭(사용자)이 데이터를 바꾸면 BroadcastChannel로 퍼지는 알림 */
+export interface ChangeEvent {
+  /** 바뀐 자원의 경로 앞부분. 예: skus, skus/sku-001, counts/ct-002 */
+  topics: string[];
+  by: string;
+  at: string;
+  /** 알림을 보낸 탭. 자기 변경은 무시할 때 씁니다. */
+  origin: string;
+  message: string;
+}

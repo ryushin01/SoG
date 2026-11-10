@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 같은 브랜치에 새 커밋이 올라오면 이전 실행은 취소
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint · Typecheck · Test · Storybook · Build · E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # pnpm 버전은 package.json의 packageManager를 따름
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # ESLint(angular-eslint, 템플릿 접근성 규칙) + FSD 규칙(Steiger)
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      # 데모 서버(동시성 규칙), 도메인 규칙, 컴포넌트 테스트
+      - run: pnpm test
+      - run: pnpm --filter @sog/e2e exec playwright install --with-deps chromium
+      # 모든 스토리를 실제 브라우저(Chromium)에서 렌더링하고 axe 접근성 검사
+      - run: pnpm test:storybook
+      - run: pnpm build
+      # 프로덕션 빌드를 배포 구조(/, /count/)로 합쳐 업무 흐름·접근성·화면 넘침·서비스 워커 검사
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7

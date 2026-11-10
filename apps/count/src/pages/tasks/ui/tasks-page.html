@@ -1,0 +1,71 @@
+<div class="page">
+  <p class="caption">{{ session.operator()?.team }}</p>
+  <h1 id="page-title" tabindex="-1" class="title">오늘의 실사</h1>
+
+  @if (tasks.hasValue() ? tasks.value() : undefined; as result) {
+    @if (result.fromCache) {
+      <p class="offline" role="status">
+        오프라인입니다. {{ result.savedAt | ago }} 받은 목록을 보여 줍니다.
+      </p>
+    }
+    <section aria-labelledby="active-title">
+      <h2 id="active-title" class="caption section">배정된 작업 {{ active().length }}</h2>
+      <ul class="cards">
+        @for (task of active(); track task.id) {
+          <li>
+            <a class="card" [routerLink]="['/tasks', task.id]">
+              <span class="card__top">
+                <span class="mono card__code">{{ task.code }}</span>
+                <cnt-task-status-pill [status]="task.status" />
+              </span>
+              <span class="card__title">{{ task.title }}</span>
+              <span class="card__meta">
+                {{ zoneLabel[task.zone] }} ·
+                <span [class.late]="overdue(task)"
+                  >마감 {{ task.dueAt | day }}
+                  @if (overdue(task)) {
+                    (지남)
+                  }
+                </span>
+                @if (task.blind) {
+                  · 블라인드
+                }
+              </span>
+              @if (task.recountCount > 0) {
+                <span class="pill pill--wine">재실사 요청 {{ task.recountCount }}</span>
+              }
+              <cnt-progress [done]="task.countedCount" [total]="task.lineCount" />
+            </a>
+          </li>
+        } @empty {
+          <li class="muted empty">
+            배정된 실사 작업이 없습니다. 관리자가 배정하면 여기에 바로 나타납니다.
+          </li>
+        }
+      </ul>
+    </section>
+
+    @if (done().length > 0) {
+      <section aria-labelledby="done-title">
+        <h2 id="done-title" class="caption section">제출한 작업</h2>
+        <ul class="done">
+          @for (task of done(); track task.id) {
+            <li>
+              <span class="mono">{{ task.code }}</span>
+              <span>{{ task.title }}</span>
+              <cnt-task-status-pill [status]="task.status" />
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  } @else if (tasks.error()) {
+    <cnt-state-message
+      kind="error"
+      message="작업 목록을 불러오지 못했습니다. 처음 한 번은 연결이 필요합니다."
+      (retry)="tasks.reload()"
+    />
+  } @else {
+    <cnt-state-message message="작업 목록을 불러오는 중입니다." />
+  }
+</div>

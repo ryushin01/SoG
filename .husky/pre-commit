@@ -1,0 +1,5 @@
+# 스테이징된 파일에만 eslint --fix와 prettier를 실행합니다. 설정은 package.json의 "lint-staged".
+pnpm exec lint-staged
+
+# 타입 오류는 고친 파일 밖에서도 생길 수 있어 전체를 검사합니다.
+pnpm typecheck

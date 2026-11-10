@@ -1,0 +1,17 @@
+# 빌드 산출물·의존성
+**/node_modules/
+**/dist/
+**/.angular/
+**/storybook-static/
+**/test-results/
+**/playwright-report/
+**/coverage/
+.turbo/
+
+# 패키지 매니저가 관리하는 파일
+pnpm-lock.yaml
+
+# 문서는 표·줄바꿈을 손으로 맞춰 두었으므로 제외
+*.md
+site/
+e2e/playwright-report/

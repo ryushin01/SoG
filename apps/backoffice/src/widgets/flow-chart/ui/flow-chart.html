@@ -1,0 +1,106 @@
+<figure class="chart">
+  <figcaption class="legend">
+    <span class="legend__item"
+      ><span class="key key--receipt" aria-hidden="true"></span>입고
+      {{ totals().receipt | num }}</span
+    >
+    <span class="legend__item"
+      ><span class="key key--shipment" aria-hidden="true"></span>출고
+      {{ totals().shipment | num }}</span
+    >
+  </figcaption>
+
+  <div
+    class="plot"
+    tabindex="0"
+    role="group"
+    [attr.aria-label]="summary() + '. 좌우 화살표로 날짜별 수량을 들을 수 있습니다.'"
+    (keydown)="onKey($event)"
+    (blur)="active.set(null)"
+    (pointerleave)="active.set(null)"
+  >
+    <svg [attr.viewBox]="'0 0 ' + W + ' ' + H" aria-hidden="true" preserveAspectRatio="none">
+      @for (tick of ticks(); track tick) {
+        <line
+          class="grid"
+          [attr.x1]="PAD.left"
+          [attr.x2]="W - PAD.right"
+          [attr.y1]="y(tick)"
+          [attr.y2]="y(tick)"
+        />
+        <text class="axis" [attr.x]="PAD.left - 8" [attr.y]="y(tick) + 4" text-anchor="end">
+          {{ tick }}
+        </text>
+      }
+      @for (bar of bars(); track bar.date; let i = $index) {
+        <g class="day" [class.day--active]="active() === i">
+          <rect
+            class="hit"
+            [attr.x]="bar.band.x"
+            y="0"
+            [attr.width]="bar.band.w"
+            [attr.height]="H - PAD.bottom"
+            (pointerenter)="active.set(i)"
+          />
+          <path class="bar bar--receipt" [attr.d]="barPath(bar.rBar.x, bar.rBar.w, bar.rBar.h)" />
+          <path class="bar bar--shipment" [attr.d]="barPath(bar.sBar.x, bar.sBar.w, bar.sBar.h)" />
+          @if (i % 2 === 1 || i === bars().length - 1) {
+            <text class="axis" [attr.x]="bar.cx" [attr.y]="H - 8" text-anchor="middle">
+              {{ bar.label }}
+            </text>
+          }
+        </g>
+      }
+      <line
+        class="baseline"
+        [attr.x1]="PAD.left"
+        [attr.x2]="W - PAD.right"
+        [attr.y1]="H - PAD.bottom"
+        [attr.y2]="H - PAD.bottom"
+      />
+    </svg>
+
+    <div class="tip" aria-live="polite">
+      @if (current(); as day) {
+        <div class="tip__box" [style.left.%]="(day.cx / W) * 100">
+          <p class="tip__date">{{ day.label }}</p>
+          <p class="tip__row">
+            <span class="tip__key tip__key--receipt" aria-hidden="true"></span
+            ><strong>{{ day.receipt | num }}</strong> 입고
+          </p>
+          <p class="tip__row">
+            <span class="tip__key tip__key--shipment" aria-hidden="true"></span
+            ><strong>{{ day.shipment | num }}</strong> 출고
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+
+  <details class="table-view">
+    <summary>표로 보기</summary>
+    <div class="table-wrap">
+      <table class="table">
+        <caption class="visually-hidden">
+          날짜별 입고·출고 수량
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">날짜</th>
+            <th scope="col" class="num">입고</th>
+            <th scope="col" class="num">출고</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (day of flow(); track day.date) {
+            <tr>
+              <th scope="row">{{ dayLabel(day.date) }}</th>
+              <td class="num">{{ day.receipt | num }}</td>
+              <td class="num">{{ day.shipment | num }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </details>
+</figure>
