@@ -1,5 +1,5 @@
 import type { ChangeEvent } from '@sog/domain';
-import { createWmsServer, type WmsServer } from '@sog/wms-server';
+import { createWmsServer, verifyToken, type WmsServer } from '@sog/wms-server';
 import { createPgBackend } from './pg-backend';
 import type { SqlDatabase } from './sql';
 
@@ -30,10 +30,15 @@ function text(value: unknown, max: number): string | null {
  * 실제 서버의 /api. 업무 API는 브라우저 데모 서버와 같은 코드(@sog/wms-server)를 Postgres 위에서 돌리고,
  * 기기 사이의 실시간 반영을 위해 변경 피드(/api/changes)와 접속 표시(/api/presence)를 더합니다.
  */
-export async function createApiHandler(
-  db: SqlDatabase,
-  options: { now?: () => Date } = {},
-): Promise<ApiHandler> {
+export interface ApiOptions {
+  now?: () => Date;
+  /** 로그인 토큰 서명 키(운영은 AUTH_SECRET) */
+  authSecret: string;
+  /** 매일 밤 초기화(Vercel Cron)를 부를 때 쓰는 키(CRON_SECRET). 없으면 /api/cron/reset을 막습니다. */
+  cronSecret?: string;
+}
+
+export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Promise<ApiHandler> {
   const backend = createPgBackend(db);
   await backend.migrate();
   let server: WmsServer | null = null;
@@ -43,7 +48,17 @@ export async function createApiHandler(
       lock: backend.lock,
       publisher: backend.publisher,
       now: options.now,
+      authSecret: options.authSecret,
     }));
+
+  /** 변경 피드·접속 표시도 로그인한 사용자만 씁니다. 토큰의 사용자 ID를 돌려줍니다. */
+  async function authenticate(request: Request): Promise<string | null> {
+    const raw = request.headers.get('authorization');
+    const token = raw?.startsWith('Bearer ') ? raw.slice(7).trim() : null;
+    if (!token) return null;
+    const now = Math.floor((options.now?.() ?? new Date()).getTime() / 1000);
+    return verifyToken(options.authSecret, token, now);
+  }
 
   async function readBody(request: Request): Promise<unknown> {
     if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'DELETE')
@@ -90,7 +105,7 @@ export async function createApiHandler(
     return json(200, { cursor: items.at(-1)?.seq ?? after, items });
   }
 
-  async function presence(request: Request, url: URL): Promise<Response> {
+  async function presence(request: Request, url: URL, userId: string): Promise<Response> {
     const tabId = url.pathname.split('/')[3];
     if (request.method === 'GET') {
       const { rows } = await db.query<{ data: Record<string, unknown> }>(
@@ -110,13 +125,14 @@ export async function createApiHandler(
       const body = (await readBody(request)) as Record<string, unknown> | undefined;
       const peer = {
         tabId: text(body?.['tabId'], 40),
-        userId: text(body?.['userId'], 40),
+        // 사용자는 본문이 아니라 토큰으로 정합니다(다른 사람인 척 접속 표시를 남기지 못하게).
+        userId,
         app: text(body?.['app'], 20) ?? '',
         resource: text(body?.['resource'], 120),
         editing: body?.['editing'] === true,
         detail: (text(body?.['detail'], 200) ?? '').slice(0, 120),
       };
-      if (!peer.tabId || !peer.userId || !peer.resource) {
+      if (!peer.tabId || !peer.resource) {
         return json(400, { code: 'VALIDATION', message: '접속 정보가 올바르지 않습니다.' });
       }
       await db.query(
@@ -134,9 +150,23 @@ export async function createApiHandler(
       const url = new URL(request.url);
       try {
         if (url.pathname === '/api/health') return json(200, { mode: 'remote' });
-        if (url.pathname === '/api/changes') return await changes(url);
-        if (url.pathname === '/api/presence' || url.pathname.startsWith('/api/presence/')) {
-          return await presence(request, url);
+        if (url.pathname === '/api/cron/reset') {
+          // Vercel Cron이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
+          if (
+            !options.cronSecret ||
+            request.headers.get('authorization') !== `Bearer ${options.cronSecret}`
+          ) {
+            return json(401, { code: 'UNAUTHENTICATED', message: '예약 작업만 부를 수 있습니다.' });
+          }
+          await (await getServer()).reset();
+          return json(200, { reset: true });
+        }
+        if (url.pathname === '/api/changes' || url.pathname.startsWith('/api/presence')) {
+          const userId = await authenticate(request);
+          if (!userId)
+            return json(401, { code: 'UNAUTHENTICATED', message: '로그인이 필요합니다.' });
+          if (url.pathname === '/api/changes') return await changes(url);
+          return await presence(request, url, userId);
         }
         const headers: Record<string, string> = {};
         request.headers.forEach((value, key) => (headers[key] = value));

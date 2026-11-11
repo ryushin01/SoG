@@ -2,11 +2,11 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter } from 'rxjs';
-import { WmsHost } from '@/shared/api';
+import { AuthSession, WmsHost } from '@/shared/api';
 import { ToastOutlet } from '@/shared/ui';
 import { RemoteChangeNotifier } from '@/features/notify-changes';
 import { ResetDemoButton } from '@/features/reset-demo';
-import { UserSwitcher } from '@/features/switch-user';
+import { UserMenu } from '@/features/auth';
 
 const NAV = [
   { index: '00', path: '/', label: '운영 현황', exact: true },
@@ -27,7 +27,7 @@ const NAV = [
     ToastOutlet,
     RemoteChangeNotifier,
     ResetDemoButton,
-    UserSwitcher,
+    UserMenu,
   ],
   templateUrl: './shell.html',
   styleUrl: './shell.css',
@@ -36,6 +36,7 @@ export class Shell {
   protected readonly nav = NAV;
   protected readonly menuOpen = signal(false);
   protected readonly host = inject(WmsHost);
+  protected readonly auth = inject(AuthSession);
   private readonly document = inject(DOCUMENT);
 
   constructor() {

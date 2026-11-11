@@ -24,6 +24,6 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
     ),
     { provide: TitleStrategy, useClass: PageTitleStrategy },
-    provideWmsClient({ latency: [120, 380] }, '백오피스'),
+    provideWmsClient({ latency: [120, 380] }, '백오피스', 'session'),
   ],
 };

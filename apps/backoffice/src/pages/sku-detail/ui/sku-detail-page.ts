@@ -11,7 +11,13 @@ import {
 } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
-import { available, CATEGORY_LABEL, type SkuDetail, type StockWithLocation } from '@sog/domain';
+import {
+  available,
+  CATEGORY_LABEL,
+  type HistoryEntry,
+  type SkuDetail,
+  type StockWithLocation,
+} from '@sog/domain';
 import { WmsHost } from '@/shared/api';
 import { DateTimePipe, NumPipe, WonPipe } from '@/shared/lib';
 import { Dialog, PageHeader, StateMessage } from '@/shared/ui';
@@ -20,7 +26,8 @@ import { MovementTypeBadge } from '@/entities/movement';
 import { SkuArt, StockStatusBadge } from '@/entities/sku';
 import { UserNamePipe } from '@/entities/user';
 import { AdjustStockForm } from '@/features/adjust-stock';
-import { EditSkuForm } from '@/features/edit-sku';
+import { EditSkuForm, type SkuModel } from '@/features/edit-sku';
+import { HistoryTimeline } from './history-timeline';
 import { MovementForm } from '@/features/record-movement';
 import { PresenceNotice } from '@/features/show-presence';
 
@@ -43,6 +50,7 @@ import { PresenceNotice } from '@/features/show-presence';
     EditSkuForm,
     MovementForm,
     PresenceNotice,
+    HistoryTimeline,
   ],
   templateUrl: './sku-detail-page.html',
   styleUrl: './sku-detail-page.css',
@@ -63,6 +71,14 @@ export class SkuDetailPage {
     const reserved = stocks.reduce((sum, s) => sum + s.reserved, 0);
     return { onHand, reserved, available: available(onHand, reserved) };
   });
+  protected readonly history = httpResource<{ items: HistoryEntry[] }>(
+    () => `/api/skus/${encodeURIComponent(this.skuId())}/history`,
+  );
+  protected readonly historyItems = computed(() =>
+    this.history.hasValue() ? this.history.value().items : [],
+  );
+  /** 변경 이력에서 수정 폼으로 불러올 값 */
+  protected readonly restore = signal<{ values: Partial<SkuModel>; label: string } | null>(null);
   protected readonly adjusting = signal<StockWithLocation | null>(null);
   protected readonly movementOpen = signal(false);
   protected readonly categoryLabel = CATEGORY_LABEL;
@@ -74,12 +90,29 @@ export class SkuDetailPage {
       if (sku) title.setTitle(`${sku.name} · 재고 · SoG 백오피스`);
     });
     this.host.onChange(['*', 'skus'], (event) => {
-      if (event.topics.includes('*') || event.topics.includes(`skus/${this.skuId()}`))
+      if (event.topics.includes('*') || event.topics.includes(`skus/${this.skuId()}`)) {
         this.detail.reload();
+        this.history.reload();
+      }
     });
   }
 
   protected free(stock: StockWithLocation): number {
     return available(stock.onHand, stock.reserved);
+  }
+
+  /** 일반 기록은 바뀌기 전 값을, 막힌 시도는 그때 시도한 값을 폼에 불러옵니다. */
+  protected restoreFrom(entry: HistoryEntry): void {
+    const values: Partial<Record<keyof SkuModel, unknown>> = {};
+    for (const change of entry.changes) {
+      values[change.field as keyof SkuModel] = entry.blocked ? change.after : change.before;
+    }
+    this.restore.set({
+      values: values as Partial<SkuModel>,
+      label: entry.blocked ? '막힌 시도의' : '이전',
+    });
+    document
+      .getElementById('edit-sku-title')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }

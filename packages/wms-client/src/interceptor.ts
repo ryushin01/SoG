@@ -5,17 +5,12 @@ import {
   type HttpInterceptorFn,
   HttpResponse,
 } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { inject } from '@angular/core';
 import type { ApiError } from '@sog/domain';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
+import { AuthSession } from './auth';
 import { WmsHost } from './host';
 import { NetworkState } from './network';
-
-/** 요청을 보내는 사용자. 실제 서비스의 인증 토큰 대신 x-sog-user 헤더로 보냅니다. */
-@Injectable({ providedIn: 'root' })
-export class ApiIdentity {
-  readonly userId = signal('u-kim');
-}
 
 /**
  * /api 요청의 행선지를 정합니다.
@@ -29,9 +24,10 @@ export const wmsInterceptor: HttpInterceptorFn = (request, next) => {
 
   const host = inject(WmsHost);
   const network = inject(NetworkState);
-  const identity = inject(ApiIdentity);
+  const auth = inject(AuthSession);
+  const isLogin = path.startsWith('/api/auth/login');
 
-  return new Observable<HttpEvent<unknown>>((subscriber) => {
+  const call = new Observable<HttpEvent<unknown>>((subscriber) => {
     let cancelled = false;
     if (!network.online()) {
       const body: ApiError = { code: 'NETWORK', message: '네트워크에 연결되어 있지 않습니다.' };
@@ -40,7 +36,9 @@ export const wmsInterceptor: HttpInterceptorFn = (request, next) => {
       );
       return;
     }
-    const headers: Record<string, string> = { 'x-sog-user': identity.userId() };
+    const headers: Record<string, string> = {};
+    const token = auth.token();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     for (const key of request.headers.keys()) headers[key] = request.headers.get(key) ?? '';
     const query = request.params.toString();
     let inner: { unsubscribe(): void } | null = null;
@@ -50,7 +48,10 @@ export const wmsInterceptor: HttpInterceptorFn = (request, next) => {
       if (mode === 'remote') {
         inner = next(
           request.clone({
-            setHeaders: { 'x-sog-user': identity.userId(), 'x-sog-origin': host.origin() },
+            setHeaders: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              'x-sog-origin': host.origin(),
+            },
           }),
         ).subscribe(subscriber);
         return;
@@ -113,4 +114,14 @@ export const wmsInterceptor: HttpInterceptorFn = (request, next) => {
       inner?.unsubscribe();
     };
   });
+  // 토큰이 만료되었거나 서명 키가 바뀌었으면(401) 세션을 비워 로그인 화면으로 보냅니다.
+  return call.pipe(
+    tap({
+      error: (error: unknown) => {
+        if (!isLogin && error instanceof HttpErrorResponse && error.status === 401) {
+          auth.logout('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+        }
+      },
+    }),
+  );
 };

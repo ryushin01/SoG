@@ -1,10 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { expectAccessibleLayout, resetDemo } from './helpers';
+import { expectAccessibleLayout, loginBackoffice, loginCount, resetDemo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await resetDemo(page);
-  await page.goto('/count/');
-  await page.getByRole('button', { name: /이서준/ }).click();
+  await loginCount(page);
   await expect(page.getByRole('heading', { level: 1, name: '오늘의 실사' })).toBeVisible();
   // 처음 한 번은 연결된 상태에서 목록을 받아 기기에 남깁니다.
   await expect(page.getByRole('link', { name: /A구역 2통로/ })).toBeVisible();
@@ -29,7 +28,7 @@ test('현장에서 센 수량이 같은 브라우저의 백오피스 검토 화�
   context,
 }) => {
   const backoffice = await context.newPage();
-  await backoffice.goto('/counts/ct-003');
+  await loginBackoffice(backoffice, '김하늘', '/counts/ct-003');
   const pendingRows = backoffice.locator('tbody tr', { hasText: '미실사' });
   await expect(pendingRows.first()).toBeVisible();
   const before = await pendingRows.count();

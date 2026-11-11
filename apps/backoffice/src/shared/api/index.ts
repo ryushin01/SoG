@@ -1,10 +1,11 @@
 export {
-  ApiIdentity,
+  AuthSession,
   idempotencyKey,
   ifMatch,
   isVersionConflict,
   Presence,
   provideWmsClient,
+  seedTestSession,
   SubmitLock,
   toApiError,
   WmsHost,

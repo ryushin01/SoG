@@ -1,19 +1,34 @@
 import type { SkuDetail } from '@sog/domain';
-import { createWmsServer, type WmsServer } from '@sog/wms-server';
+import { createWmsServer, issueToken, LOCAL_AUTH_SECRET, type WmsServer } from '@sog/wms-server';
 import { render, screen, within } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
-import { provideWmsClient } from '@/shared/api';
+import { provideWmsClient, seedTestSession } from '@/shared/api';
 import { EditSkuForm } from './edit-sku-form';
+
+/** 서버를 직접 부를 때 붙이는 로그인 헤더 */
+async function auth(userId: string): Promise<Record<string, string>> {
+  const { token } = await issueToken(LOCAL_AUTH_SECRET, userId, Math.floor(Date.now() / 1000));
+  return { Authorization: `Bearer ${token}` };
+}
 
 describe('EditSkuForm', () => {
   let other: WmsServer;
   let detail: SkuDetail;
 
   beforeEach(async () => {
+    await seedTestSession(
+      { id: 'u-kim', name: '김하늘', role: 'manager', team: '재고관리팀' },
+      'session',
+    );
     const dbName = `bo-${crypto.randomUUID()}`;
     other = await createWmsServer({ dbName });
-    detail = (await other.handle({ method: 'GET', url: '/api/skus/sku-10201', headers: {} }))
-      .body as SkuDetail;
+    detail = (
+      await other.handle({
+        method: 'GET',
+        url: '/api/skus/sku-10201',
+        headers: await auth('u-kim'),
+      })
+    ).body as SkuDetail;
     await render(EditSkuForm, {
       inputs: { detail },
       providers: [provideWmsClient({ dbName, latency: [0, 0] })],
@@ -27,7 +42,7 @@ describe('EditSkuForm', () => {
     await other.handle({
       method: 'PATCH',
       url: '/api/skus/sku-10201',
-      headers: { 'x-sog-user': 'u-park', 'If-Match': `"${detail.sku.version}"` },
+      headers: { ...(await auth('u-park')), 'If-Match': `"${detail.sku.version}"` },
       body: { safetyStock: 99 },
     });
 
@@ -45,8 +60,13 @@ describe('EditSkuForm', () => {
     await userEvent.click(within(alert).getByRole('button', { name: '내 입력으로 다시 저장' }));
     await screen.findByText(/v3/, {}, { timeout: 3000 });
 
-    const saved = (await other.handle({ method: 'GET', url: '/api/skus/sku-10201', headers: {} }))
-      .body as SkuDetail;
+    const saved = (
+      await other.handle({
+        method: 'GET',
+        url: '/api/skus/sku-10201',
+        headers: await auth('u-kim'),
+      })
+    ).body as SkuDetail;
     expect(saved.sku.safetyStock).toBe(12);
     expect(saved.sku.version).toBe(3);
   });
