@@ -105,14 +105,20 @@ export class SkuDetailPage {
   protected restoreFrom(entry: HistoryEntry): void {
     const values: Partial<Record<keyof SkuModel, unknown>> = {};
     for (const change of entry.changes) {
-      values[change.field as keyof SkuModel] = entry.blocked ? change.after : change.before;
+      const value = entry.blocked ? change.after : change.before;
+      // 빈 값은 불러오지 않습니다. 숫자 칸에 null이 들어가 0으로 보이는 일을 막습니다.
+      if (value === null || value === undefined) continue;
+      values[change.field as keyof SkuModel] = value;
     }
     this.restore.set({
       values: values as Partial<SkuModel>,
       label: entry.blocked ? '막힌 시도의' : '이전',
     });
-    document
-      .getElementById('edit-sku-title')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 불러온 값을 바로 확인하도록 수정 폼 제목으로 초점을 옮깁니다(초점 이동이 스크롤도 함께 합니다).
+    const title = document.getElementById('edit-sku-title');
+    if (title) {
+      title.tabIndex = -1;
+      title.focus();
+    }
   }
 }

@@ -35,6 +35,9 @@ export class KeyValueStore<T> {
       const request = work(tx.objectStore(this.storeName));
       tx.oncomplete = () => resolve(request.result);
       tx.onerror = () => reject(tx.error);
+      // 요청 오류 없이 커밋 단계에서 취소되면(예: 저장 공간 초과) onerror가 오지 않습니다.
+      tx.onabort = () =>
+        reject(tx.error ?? new DOMException('트랜잭션이 취소되었습니다.', 'AbortError'));
     });
   }
 

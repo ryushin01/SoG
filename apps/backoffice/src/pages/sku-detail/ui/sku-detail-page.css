@@ -67,7 +67,9 @@
 }
 
 .stale {
-  opacity: 0.6;
+  /* 새로 고치는 중. 글자를 흐리게 하면 명도 대비가 모자라므로 위쪽 선으로만 알립니다. */
+  box-shadow: inset 0 3px 0 var(--accent);
+  cursor: progress;
 }
 
 .nowrap {

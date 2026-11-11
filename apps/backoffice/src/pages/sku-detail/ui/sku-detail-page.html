@@ -64,7 +64,7 @@
     <p class="eyebrow"><span>A</span><span>Locations</span></p>
     <h2 id="stock-title" class="block__title">로케이션별 재고</h2>
     <div class="table-wrap" tabindex="0" role="region" aria-labelledby="stock-title">
-      <table class="table" [class.stale]="detail.isLoading()">
+      <table class="table" [class.stale]="detail.isLoading()" [attr.aria-busy]="detail.isLoading()">
         <thead>
           <tr>
             <th scope="col">로케이션</th>
