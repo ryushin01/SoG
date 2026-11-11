@@ -118,4 +118,5 @@ docs/            문서와 스크린샷
 | [개발 가이드](docs/development.md) | 구조, Angular 사용 방식, FSD, 개발 서버, 테스트, 접근성 점검 |
 | [디자인](docs/design.md) | 참고 사이트, 두 앱의 디자인 토큰, 품목 그림 |
 | [CI · 배포](docs/ci-deploy.md) | GitHub Actions, Vercel, 배포된 사이트 검사, Dependabot |
+| [시퀀스 다이어그램](docs/sequence-diagrams.md) | 낙관적 잠금 충돌, 현장 실사 보낼함과 실시간 반영, 출고 지시 재고 예약, 실사 승인 정산 |
 | [버전 기록](CHANGELOG.md) | 버전별 변경 내용 |
