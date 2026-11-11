@@ -1,9 +1,11 @@
 /** 데모 데이터. 고정 시드 난수로 만들어 언제 초기화해도 같은 구성이 나옵니다. 시각만 초기화 시점을 기준으로 합니다. */
 import {
+  allocate,
   ean13CheckDigit,
   type Activity,
   type CountLine,
   type CountTask,
+  type ShipmentOrder,
   type Location,
   type Movement,
   type Sku,
@@ -23,6 +25,7 @@ export interface SeedData {
   movements: Movement[];
   counts: CountTask[];
   countLines: CountLine[];
+  orders: ShipmentOrder[];
   activity: Activity[];
 }
 
@@ -238,7 +241,8 @@ export function createSeed(now: Date): SeedData {
           skuId: id,
           locationId: location.id,
           onHand,
-          reserved: onHand > 8 && rand() < 0.3 ? int(1, Math.floor(onHand / 4)) : 0,
+          // 출고 지시 수량은 아래에서 실제 출고 지시의 할당으로만 채웁니다.
+          reserved: 0,
           version: 1,
           updatedAt,
           updatedBy: 'u-kim',
@@ -414,6 +418,135 @@ export function createSeed(now: Date): SeedData {
         off < 0 ? (index === 0 ? '파손품 따로 보관' : '') : off > 0 ? '옆 칸에 섞여 있음' : '';
     });
 
+  // 출고 지시: 피킹 대기, 피킹 중, 출고 완료(기록) 하나씩
+  const orders: ShipmentOrder[] = [];
+  const usedSkus = new Set<string>();
+  const busyStocks = new Set(
+    countLines
+      .filter((line) => ['ct-002', 'ct-003', 'ct-004', 'ct-005'].includes(line.taskId))
+      .map((line) => line.stockId),
+  );
+  const makeOrder = (
+    n: number,
+    customer: string,
+    assigneeId: string,
+    status: ShipmentOrder['status'],
+    wants: [skuIndex: number, qty: number][],
+    createdHoursAgo: number,
+    dueInHours: number,
+  ) => {
+    const id = `so-${pad(n, 3)}`;
+    const createdAt = ago(0, createdHoursAgo);
+    const lines: ShipmentOrder['lines'] = [];
+    wants.forEach(([skuIndex, wanted], index) => {
+      // 실사 중인 재고는 피해서 할당합니다(데모에서 실사 정산과 엉키지 않게).
+      // 고른 품목에 가용 재고가 모자라면 다음 품목으로 넘어가고, 수량은 가용 재고 안으로 줄입니다.
+      const freeOf = (skuId: string) =>
+        stocks
+          .filter((stock) => stock.skuId === skuId && !busyStocks.has(stock.id))
+          .reduce((sum, stock) => sum + Math.max(0, stock.onHand - stock.reserved), 0);
+      let sku = skus[skuIndex]!;
+      for (let step = 0; step < skus.length; step++) {
+        const candidate = skus[(skuIndex + step) % skus.length]!;
+        if (freeOf(candidate.id) >= 2 && !usedSkus.has(candidate.id)) {
+          sku = candidate;
+          break;
+        }
+      }
+      const qty = Math.min(wanted, freeOf(sku.id));
+      if (qty < 1) return;
+      usedSkus.add(sku.id);
+      const candidates = stocks.filter(
+        (stock) => stock.skuId === sku.id && !busyStocks.has(stock.id),
+      );
+      const picks = allocate(candidates, qty);
+      if (!picks) return;
+      lines.push({
+        id: `${id}-l${index}`,
+        skuId: sku.id,
+        qty,
+        allocations: picks.map((pick, i) => {
+          if (status !== 'shipped') pick.stock.reserved += pick.qty;
+          const picked = status === 'shipped' || (status === 'picking' && index === 0);
+          return {
+            id: `${id}-l${index}-a${i}`,
+            stockId: pick.stock.id,
+            locationId: pick.stock.locationId,
+            qty: pick.qty,
+            pickedQty: picked ? pick.qty : null,
+            pickedBy: picked ? assigneeId : null,
+            pickedAt: picked ? ago(0, Math.max(0, createdHoursAgo - 1)) : null,
+            note: '',
+          };
+        }),
+      });
+    });
+    orders.push({
+      id,
+      code: `SO-${yymm}-${pad(n, 4)}`,
+      customer,
+      status,
+      assigneeId,
+      dueAt: new Date(now.getTime() + dueInHours * 3_600_000).toISOString(),
+      createdAt,
+      createdBy: 'u-park',
+      shippedAt: status === 'shipped' ? ago(0, Math.max(0, createdHoursAgo - 3)) : null,
+      lines,
+      version: 1,
+      updatedAt: createdAt,
+      updatedBy: 'u-park',
+    });
+    activity.push({
+      id: `ac-${id}`,
+      kind: status === 'shipped' ? 'order.shipped' : 'order.created',
+      message:
+        status === 'shipped'
+          ? `${customer} 출고 지시 SO-${yymm}-${pad(n, 4)}을(를) 출고했습니다.`
+          : `${customer} 출고 지시 SO-${yymm}-${pad(n, 4)}을(를) 만들고 재고를 예약했습니다.`,
+      at: createdAt,
+      by: 'u-park',
+      target: `/orders/${id}`,
+    });
+  };
+  makeOrder(
+    1,
+    '새솔상사',
+    'u-jung',
+    'shipped',
+    [
+      [8, 12],
+      [24, 6],
+    ],
+    26,
+    -20,
+  );
+  makeOrder(
+    2,
+    '한빛리테일',
+    'u-lee',
+    'picking',
+    [
+      [0, 8],
+      [26, 4],
+      [33, 10],
+    ],
+    3,
+    5,
+  );
+  makeOrder(
+    3,
+    '온누리마켓',
+    'u-jung',
+    'reserved',
+    [
+      [9, 20],
+      [12, 6],
+      [40, 3],
+    ],
+    1,
+    20,
+  );
+
   movements.sort((a, b) => a.at.localeCompare(b.at));
   for (const movement of movements.slice(-24)) {
     activity.push({
@@ -427,7 +560,7 @@ export function createSeed(now: Date): SeedData {
   }
   activity.sort((a, b) => b.at.localeCompare(a.at));
 
-  return { users: USERS, locations, skus, stocks, movements, counts, countLines, activity };
+  return { users: USERS, locations, skus, stocks, movements, counts, countLines, orders, activity };
 }
 
 function describeMovementSeed(movement: Movement, skus: Sku[], locations: Location[]): string {

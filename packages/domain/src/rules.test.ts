@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   accuracyRate,
+  allocate,
   available,
   ean13CheckDigit,
   formatDelta,
@@ -71,6 +72,26 @@ describe('재고 규칙', () => {
     expect(ean13CheckDigit('400638133393')).toBe(1);
     expect(isValidEan13('4006381333931')).toBe(true);
     expect(isValidEan13('4006381333932')).toBe(false);
+  });
+});
+
+describe('재고 할당', () => {
+  const stocks = [
+    { id: 'a', onHand: 10, reserved: 8 },
+    { id: 'b', onHand: 30, reserved: 0 },
+    { id: 'c', onHand: 5, reserved: 0 },
+  ];
+
+  it('가용 재고가 많은 로케이션부터 채운다', () => {
+    expect(allocate(stocks, 33)?.map((p) => [p.stock.id, p.qty])).toEqual([
+      ['b', 30],
+      ['c', 3],
+    ]);
+  });
+
+  it('모든 가용 재고를 합쳐도 모자라면 null', () => {
+    expect(allocate(stocks, 38)).toBeNull();
+    expect(allocate(stocks, 37)?.reduce((sum, p) => sum + p.qty, 0)).toBe(37);
   });
 });
 

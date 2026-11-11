@@ -1,7 +1,13 @@
 import type {
   ChangeEvent,
   CountTaskDetail,
+  LocationDetail,
+  LocationOverview,
   Movement,
+  OrderDetail,
+  OrderSummary,
+  ShipmentOrder,
+  StockLevel,
   Page,
   SkuDetail,
   SkuSummary,
@@ -70,6 +76,77 @@ describe('조회', () => {
     const barcode = all.items[0]!.barcode;
     const found = (await call(server!, 'GET', `/api/skus?q=${barcode}`)).body as Page<SkuSummary>;
     expect(found.items.map((sku) => sku.barcode)).toEqual([barcode]);
+  });
+});
+
+describe('창고 도면', () => {
+  it('로케이션마다 수량·상태·실사 중 여부를 돌려준다', async () => {
+    const [server] = await tabs(1);
+    const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+      items: LocationOverview[];
+    };
+    expect(items).toHaveLength(42);
+    expect(items.some((item) => item.status === 'empty')).toBe(true);
+    // ct-003(A구역 2통로)이 진행 중
+    expect(
+      items.find((item) => item.location.code.startsWith('A-02-') && item.units > 0)!.countingTask,
+    ).toMatch(/^CC-/);
+    expect(
+      items
+        .filter((item) => item.location.zone === 'A' && item.location.aisle === 1)
+        .every((i) => i.countingTask === null),
+    ).toBe(true);
+  });
+
+  it('마지막 수량까지 출고해 0이 된 로케이션은 비어 있음이 아니라 품절로 표시한다', async () => {
+    const [server] = await tabs(1);
+    const list = (await call(server!, 'GET', '/api/skus?size=100')).body as Page<SkuSummary>;
+    // 로케이션 한 곳에만 있는 품목을 골라 그 재고를 모두 출고합니다.
+    for (const sku of list.items) {
+      const detail = (await call(server!, 'GET', `/api/skus/${sku.id}`)).body as SkuDetail;
+      if (
+        detail.stocks.length !== 1 ||
+        detail.stocks[0]!.reserved > 0 ||
+        detail.stocks[0]!.onHand < 1
+      )
+        continue;
+      const stock = detail.stocks[0]!;
+      const others = (
+        (await call(server!, 'GET', `/api/locations/${stock.locationId}`)).body as LocationDetail
+      ).items;
+      if (others.length !== 1) continue;
+      const shipped = await call(server!, 'POST', '/api/movements', {
+        body: {
+          type: 'shipment',
+          skuId: sku.id,
+          fromLocationId: stock.locationId,
+          qty: stock.onHand,
+          reason: '전량 출고',
+        },
+      });
+      expect(shipped.body).toEqual(expect.objectContaining({ type: 'shipment' }));
+      const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+        items: LocationOverview[];
+      };
+      const cell = items.find((item) => item.location.id === stock.locationId)!;
+      expect(cell.units).toBe(0);
+      expect(cell.skuCount).toBe(0);
+      expect(cell.status).toBe('out');
+      return;
+    }
+    throw new Error('조건에 맞는 품목이 없습니다.');
+  });
+
+  it('로케이션 상세는 수량이 많은 품목부터 보여 준다', async () => {
+    const [server] = await tabs(1);
+    const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
+      items: LocationOverview[];
+    };
+    const busy = items.find((item) => item.skuCount > 1)!;
+    const detail = (await call(server!, 'GET', `/api/locations/${busy.location.id}`))
+      .body as LocationDetail;
+    expect(detail.items).toHaveLength(busy.skuCount);
+    expect(detail.items[0]!.onHand).toBeGreaterThanOrEqual(detail.items.at(-1)!.onHand);
   });
 });
 
@@ -289,5 +366,156 @@ describe('변경 알림', () => {
     const event = await received;
     expect(event.topics).toContain('skus/sku-10201');
     expect(event.origin).toBe(a!.origin);
+  });
+});
+
+describe('출고 지시', () => {
+  async function stocksOf(server: WmsServer, skuId: string): Promise<StockLevel[]> {
+    return ((await call(server, 'GET', `/api/skus/${skuId}`)).body as SkuDetail).stocks;
+  }
+
+  it('시드의 출고 지시 수량은 열린 출고 지시의 할당 합계와 같다', async () => {
+    const [server] = await tabs(1);
+    const { items } = (await call(server!, 'GET', '/api/orders?status=reserved,picking,picked'))
+      .body as {
+      items: OrderSummary[];
+    };
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    const expected = new Map<string, number>();
+    for (const summary of items) {
+      const detail = (await call(server!, 'GET', `/api/orders/${summary.id}`)).body as OrderDetail;
+      for (const a of detail.route) expected.set(a.stockId, (expected.get(a.stockId) ?? 0) + a.qty);
+    }
+    const list = (await call(server!, 'GET', '/api/skus?size=100')).body as Page<SkuSummary>;
+    for (const sku of list.items) {
+      for (const stock of await stocksOf(server!, sku.id)) {
+        expect(stock.reserved).toBe(expected.get(stock.id) ?? 0);
+      }
+    }
+  });
+
+  it('두 탭이 마지막 재고로 동시에 출고 지시를 만들면 하나만 예약된다', async () => {
+    const [a, b] = await tabs(2);
+    const { sku } = await firstStock(a!);
+    const free = (await stocksOf(a!, sku.id)).reduce(
+      (sum, s) => sum + Math.max(0, s.onHand - s.reserved),
+      0,
+    );
+    const qty = Math.floor(free / 2) + 1;
+    const body = (customer: string) => ({
+      customer,
+      dueAt: new Date().toISOString(),
+      assigneeId: 'u-lee',
+      lines: [{ skuId: sku.id, qty }],
+    });
+    const results = await Promise.all([
+      call(a!, 'POST', '/api/orders', { body: body('가'), user: 'u-kim' }),
+      call(b!, 'POST', '/api/orders', { body: body('나'), user: 'u-park' }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    const reserved = (await stocksOf(a!, sku.id)).reduce((sum, s) => sum + s.reserved, 0);
+    const before = free; // 가용 재고에서 한 번만 빠졌는지
+    const after = (await stocksOf(a!, sku.id)).reduce(
+      (sum, s) => sum + Math.max(0, s.onHand - s.reserved),
+      0,
+    );
+    expect(before - after).toBe(qty);
+    expect(reserved).toBeGreaterThanOrEqual(qty);
+  });
+
+  it('피킹을 마치고 출고하면 집은 만큼 재고가 줄고, 덜 집은 예약은 풀린다', async () => {
+    const [server] = await tabs(1);
+    const { sku } = await firstStock(server!, 6);
+    const created = await call(server!, 'POST', '/api/orders', {
+      body: {
+        customer: '시험상사',
+        dueAt: new Date().toISOString(),
+        assigneeId: 'u-lee',
+        lines: [{ skuId: sku.id, qty: 5 }],
+      },
+      key: 'order-1',
+    });
+    expect(created.status).toBe(201);
+    const order = created.body as ShipmentOrder;
+    const before = await stocksOf(server!, sku.id);
+
+    // 작업자가 할당마다 집습니다. 마지막 할당은 하나 덜 집습니다.
+    let detail = (await call(server!, 'GET', `/api/orders/${order.id}`)).body as OrderDetail;
+    const route = detail.route;
+    for (const [index, a] of route.entries()) {
+      const last = index === route.length - 1;
+      const picked = await call(server!, 'PUT', `/api/orders/${order.id}/allocations/${a.id}`, {
+        body: { pickedQty: last ? a.qty - 1 : a.qty, note: last ? '파손 1개' : '' },
+        ifMatch: detail.order.version,
+        user: 'u-lee',
+      });
+      expect(picked.status).toBe(200);
+      detail = (await call(server!, 'GET', `/api/orders/${order.id}`)).body as OrderDetail;
+    }
+    expect(detail.order.status).toBe('picked');
+
+    // 오래된 버전으로 출고하면 412
+    const stale = await call(server!, 'POST', `/api/orders/${order.id}/ship`, { ifMatch: 1 });
+    expect(stale.status).toBe(412);
+    const shipped = await call(server!, 'POST', `/api/orders/${order.id}/ship`, {
+      ifMatch: detail.order.version,
+    });
+    expect(shipped.status).toBe(200);
+
+    const after = await stocksOf(server!, sku.id);
+    const sum = (list: StockLevel[], key: 'onHand' | 'reserved') =>
+      list.reduce((s, x) => s + x[key], 0);
+    expect(sum(before, 'onHand') - sum(after, 'onHand')).toBe(4);
+    expect(sum(before, 'reserved') - sum(after, 'reserved')).toBe(5);
+  });
+
+  it('작업자는 출고 지시를 만들거나 출고할 수 없고, 덜 집으면 사유가 필요하다', async () => {
+    const [server] = await tabs(1);
+    const made = await call(server!, 'POST', '/api/orders', {
+      body: {
+        customer: 'x',
+        dueAt: new Date().toISOString(),
+        assigneeId: 'u-lee',
+        lines: [{ skuId: 'sku-10201', qty: 1 }],
+      },
+      user: 'u-lee',
+    });
+    expect(made.status).toBe(409);
+    const detail = (await call(server!, 'GET', '/api/orders/so-003')).body as OrderDetail;
+    const a = detail.route[0]!;
+    const noReason = await call(server!, 'PUT', `/api/orders/so-003/allocations/${a.id}`, {
+      body: { pickedQty: a.qty - 1 },
+      ifMatch: detail.order.version,
+      user: 'u-jung',
+    });
+    expect(noReason.status).toBe(400);
+
+    // 예약 수량을 그대로 집으면 사유 없이 저장됩니다.
+    const full = await call(server!, 'PUT', `/api/orders/so-003/allocations/${a.id}`, {
+      body: { pickedQty: a.qty },
+      ifMatch: detail.order.version,
+      user: 'u-jung',
+    });
+    expect(full.status).toBe(200);
+  });
+
+  it('취소하면 예약을 모두 푼다', async () => {
+    const [server] = await tabs(1);
+    const detail = (await call(server!, 'GET', '/api/orders/so-003')).body as OrderDetail;
+    const stockIds = new Set(detail.route.map((a) => a.stockId));
+    const skuIds = new Set(detail.lines.map((l) => l.sku.id));
+    const reservedOf = async () => {
+      let total = 0;
+      for (const skuId of skuIds) {
+        for (const s of await stocksOf(server!, skuId)) if (stockIds.has(s.id)) total += s.reserved;
+      }
+      return total;
+    };
+    const before = await reservedOf();
+    const cancelled = await call(server!, 'POST', '/api/orders/so-003/cancel', {
+      ifMatch: detail.order.version,
+    });
+    expect(cancelled.status).toBe(200);
+    expect(before - (await reservedOf())).toBe(detail.route.reduce((s, a) => s + a.qty, 0));
   });
 });

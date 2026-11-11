@@ -41,6 +41,16 @@
         </dd>
       </div>
       <div class="kpi">
+        <dt>출고 지시</dt>
+        <dd>
+          <a class="kpi__link" routerLink="/orders">
+            <span class="display kpi__value">{{ k.pendingOrders }}</span
+            ><span class="kpi__unit">건</span>
+            <span class="kpi__sub">피킹·출고 대기</span>
+          </a>
+        </dd>
+      </div>
+      <div class="kpi">
         <dt>재고 정확도</dt>
         <dd>
           <span class="display kpi__value">{{ k.accuracy ?? '—' }}</span

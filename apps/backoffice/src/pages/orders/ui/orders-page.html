@@ -1,0 +1,97 @@
+<sog-page-header
+  index="03"
+  label="Outbound"
+  heading="출고 지시"
+  description="출고 지시를 만들면 가용 재고를 로케이션별로 예약하고, 현장 작업자가 피킹을 마치면 출고를 확정합니다."
+>
+  <button type="button" class="btn btn--primary" (click)="createOpen.set(true)">
+    새 출고 지시
+  </button>
+</sog-page-header>
+
+<div class="filters" role="group" aria-label="상태로 거르기">
+  @for (f of filters; track f.value) {
+    <button
+      type="button"
+      class="btn btn--small"
+      [class.btn--primary]="filter() === f.value"
+      [attr.aria-pressed]="filter() === f.value"
+      (click)="filter.set(f.value)"
+    >
+      {{ f.label }}
+    </button>
+  }
+</div>
+
+@if (items(); as orders) {
+  <div
+    class="table-wrap"
+    tabindex="0"
+    role="region"
+    aria-label="출고 지시 목록"
+    [class.stale]="list.isLoading()"
+  >
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">출고 지시</th>
+          <th scope="col">피킹 작업자</th>
+          <th scope="col">상태</th>
+          <th scope="col">피킹</th>
+          <th scope="col" class="num">수량</th>
+          <th scope="col">마감</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (order of orders; track order.id) {
+          <tr>
+            <td>
+              <a class="order" [routerLink]="['/orders', order.id]">
+                <span class="mono muted">{{ order.code }}</span>
+                <span class="order__customer">{{ order.customer }}</span>
+              </a>
+            </td>
+            <td>{{ order.assignee.name }}</td>
+            <td><sog-order-status-badge [status]="order.status" /></td>
+            <td>
+              <sog-count-progress
+                [counted]="order.pickedAllocations"
+                [total]="order.allocationCount"
+                [name]="order.code + ' 피킹 진행률'"
+              />
+            </td>
+            <td class="num">{{ order.units | num }}개 · {{ order.lineCount }}품목</td>
+            <td class="nowrap" [class.overdue]="overdue(order)">
+              {{ order.dueAt | dateTime }}
+              @if (overdue(order)) {
+                <span> · 지남</span>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6">
+              <sog-state-message kind="empty" message="이 상태의 출고 지시가 없습니다." />
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else if (list.error()) {
+  <sog-state-message
+    kind="error"
+    message="출고 지시를 불러오지 못했습니다."
+    (retry)="list.reload()"
+  />
+} @else {
+  <sog-state-message message="출고 지시를 불러오는 중입니다." />
+}
+
+<sog-dialog [(open)]="createOpen" heading="새 출고 지시">
+  @defer (when createOpen()) {
+    @if (createOpen()) {
+      <sog-create-order-form (created)="created($event)" />
+    }
+  }
+</sog-dialog>

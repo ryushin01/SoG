@@ -1,10 +1,10 @@
 {
   "name": "@sog/e2e",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "e2e": "node ../scripts/assemble-site.mjs && playwright test",
+    "e2e": "node ../scripts/assemble-site.mjs && node ../scripts/build-api.mjs && playwright test",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint . --max-warnings 0"
   },

@@ -17,13 +17,16 @@
     "preview": "pnpm build && pnpm site && node scripts/serve-site.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "build:api": "node scripts/build-api.mjs",
+    "preview:api": "pnpm build && node scripts/build-api.mjs && pnpm site && node scripts/serve-site.mjs --api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@feature-sliced/steiger-plugin": "^0.8.2",
     "@types/node": "^26.6.6",
     "angular-eslint": "^22.6.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^14.0.0",

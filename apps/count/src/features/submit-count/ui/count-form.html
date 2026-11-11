@@ -11,7 +11,12 @@
   </div>
 
   <div class="stepper">
-    <button type="button" class="btn stepper__btn" (click)="step(-1)" [disabled]="model().qty <= 0">
+    <button
+      type="button"
+      class="btn stepper__btn"
+      (click)="step(-1)"
+      [disabled]="saving() || model().qty <= 0"
+    >
       <span aria-hidden="true">−</span><span class="visually-hidden">1 빼기</span>
     </button>
     <input
@@ -23,13 +28,17 @@
       [attr.aria-invalid]="form.qty().touched() && form.qty().invalid()"
       aria-describedby="count-qty-error count-qty-diff"
     />
-    <button type="button" class="btn stepper__btn" (click)="step(1)">
+    <button type="button" class="btn stepper__btn" (click)="step(1)" [disabled]="saving()">
       <span aria-hidden="true">+</span><span class="visually-hidden">1 더하기</span>
     </button>
   </div>
   <div class="quick" role="group" aria-label="빠른 입력">
-    <button type="button" class="btn quick__btn" (click)="step(-10)">−10</button>
-    <button type="button" class="btn quick__btn" (click)="step(10)">+10</button>
+    <button type="button" class="btn quick__btn" (click)="step(-10)" [disabled]="saving()">
+      −10
+    </button>
+    <button type="button" class="btn quick__btn" (click)="step(10)" [disabled]="saving()">
+      +10
+    </button>
   </div>
   <p id="count-qty-diff" class="hint" aria-live="polite">
     @if (differs()) {
@@ -62,7 +71,11 @@
     </div>
   </div>
 
-  <button type="submit" class="btn btn--solid btn--block" [disabled]="lock.pending()">
+  @if (saveError(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <button type="submit" class="btn btn--solid btn--block" [disabled]="saving()">
     {{ lock.pending() ? '저장 중…' : network.online() ? '저장하고 다음' : '기기에 저장하고 다음' }}
   </button>
   @if (!network.online()) {

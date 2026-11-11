@@ -12,6 +12,9 @@
       }
     </div>
     <cnt-progress [done]="doneCount()" [total]="rows().length" />
+    <div class="peers">
+      <cnt-peer-notice [resource]="'counts/' + task.id" />
+    </div>
 
     @if (result.fromCache) {
       <p class="offline" role="status">

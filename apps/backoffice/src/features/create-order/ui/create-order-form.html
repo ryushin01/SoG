@@ -1,0 +1,109 @@
+<form class="stack" novalidate (submit)="onSubmit($event)">
+  <div class="grid">
+    <div class="field">
+      <label class="field__label" for="order-customer">고객사</label>
+      <input
+        id="order-customer"
+        class="input"
+        autocomplete="off"
+        [formField]="form.customer"
+        [attr.aria-invalid]="form.customer().touched() && form.customer().invalid()"
+        aria-describedby="order-customer-error"
+      />
+      <sog-field-errors [state]="form.customer()" id="order-customer-error" />
+    </div>
+    <div class="field">
+      <label class="field__label" for="order-assignee">피킹 작업자</label>
+      <select
+        id="order-assignee"
+        class="select"
+        [formField]="form.assigneeId"
+        [attr.aria-invalid]="form.assigneeId().touched() && form.assigneeId().invalid()"
+        aria-describedby="order-assignee-error"
+      >
+        <option value="">선택</option>
+        @for (user of session.operators(); track user.id) {
+          <option [value]="user.id">{{ user.name }} · {{ user.team }}</option>
+        }
+      </select>
+      <sog-field-errors [state]="form.assigneeId()" id="order-assignee-error" />
+    </div>
+    <div class="field">
+      <label class="field__label" for="order-due">출고 마감</label>
+      <input
+        id="order-due"
+        class="input"
+        type="date"
+        [formField]="form.dueAt"
+        [attr.aria-invalid]="form.dueAt().touched() && form.dueAt().invalid()"
+        aria-describedby="order-due-error"
+      />
+      <sog-field-errors [state]="form.dueAt()" id="order-due-error" />
+    </div>
+  </div>
+
+  <fieldset class="lines">
+    <legend class="field__label">품목</legend>
+    @for (line of form.lines; track $index; let i = $index) {
+      <div class="line">
+        <div class="field">
+          <label class="field__label" [for]="'order-sku-' + i">품목 {{ i + 1 }}</label>
+          <select
+            class="select"
+            [id]="'order-sku-' + i"
+            [formField]="line.skuId"
+            [attr.aria-invalid]="line.skuId().touched() && line.skuId().invalid()"
+            [attr.aria-describedby]="'order-sku-error-' + i"
+          >
+            <option value="">품목 선택</option>
+            @for (sku of skuList(); track sku.id) {
+              <option [value]="sku.id" [disabled]="sku.available === 0 || taken(sku.id, i)">
+                {{ sku.name }} ({{ sku.code }}) · 가용 {{ sku.available }}{{ sku.unit }}
+              </option>
+            }
+          </select>
+          <sog-field-errors [state]="line.skuId()" [id]="'order-sku-error-' + i" />
+        </div>
+        <div class="field qty">
+          <label class="field__label" [for]="'order-qty-' + i">수량</label>
+          <input
+            class="input"
+            type="number"
+            inputmode="numeric"
+            [id]="'order-qty-' + i"
+            [formField]="line.qty"
+            [attr.aria-invalid]="line.qty().touched() && line.qty().invalid()"
+            [attr.aria-describedby]="'order-qty-hint-' + i + ' order-qty-error-' + i"
+          />
+          <p class="field__hint" [id]="'order-qty-hint-' + i">
+            @if (availableOf(model().lines[i]?.skuId ?? ''); as sku) {
+              가용 {{ sku.available }}{{ sku.unit }}
+            }
+          </p>
+          <sog-field-errors [state]="line.qty()" [id]="'order-qty-error-' + i" />
+        </div>
+        @if (model().lines.length > 1) {
+          <button
+            type="button"
+            class="btn btn--quiet btn--small remove"
+            [attr.aria-label]="'품목 ' + (i + 1) + ' 빼기'"
+            (click)="removeLine(i)"
+          >
+            빼기
+          </button>
+        }
+      </div>
+    }
+    @if (model().lines.length < 20) {
+      <button type="button" class="btn btn--small add" (click)="addLine()">품목 추가</button>
+    }
+  </fieldset>
+
+  @if (serverError(); as message) {
+    <p class="field__error" role="alert">{{ message }}</p>
+  }
+
+  <button type="submit" class="btn btn--primary" [disabled]="lock.pending()">
+    {{ lock.pending() ? '예약 중…' : '출고 지시 만들고 재고 예약' }}
+  </button>
+</form>

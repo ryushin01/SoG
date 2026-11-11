@@ -1,0 +1,32 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-block-end: 1.25rem;
+}
+
+.order {
+  display: grid;
+  text-decoration: none;
+}
+
+.order:hover .order__customer {
+  text-decoration: underline;
+}
+
+.order__customer {
+  font-weight: 600;
+}
+
+.overdue {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.stale {
+  opacity: 0.6;
+}

@@ -1,6 +1,9 @@
 /** 데모 서버(/api)의 요청·응답 형식. 두 앱의 API 클라이언트가 이 타입으로 통신합니다. */
 import type {
   Activity,
+  Allocation,
+  OrderStatus,
+  ShipmentOrder,
   CountLine,
   CountTask,
   Location,
@@ -100,6 +103,8 @@ export interface DashboardKpis {
   outOfStock: number;
   openCounts: number;
   pendingReview: number;
+  /** 아직 출고하지 않은 출고 지시(피킹 대기·피킹 중·출고 대기) */
+  pendingOrders: number;
   /** 최근 승인된 실사의 재고 정확도(%) */
   accuracy: number | null;
   /** 최근 14일 일별 입고·출고 수량 */
@@ -148,6 +153,25 @@ export interface SubmitCountLineRequest {
   note?: string;
 }
 
+export type LocationStatus = 'empty' | 'ok' | 'low' | 'out';
+
+/** 창고 도면의 로케이션 한 칸 */
+export interface LocationOverview {
+  location: Location;
+  units: number;
+  value: number;
+  skuCount: number;
+  /** 이 칸에 있는 품목 중 가장 나쁜 상태(품목 전체 재고 기준) */
+  status: LocationStatus;
+  /** 진행 중인 실사 작업이 이 칸을 세고 있으면 작업 코드 */
+  countingTask: string | null;
+}
+
+export interface LocationDetail {
+  overview: LocationOverview;
+  items: { sku: SkuSummary; onHand: number; reserved: number; version: number }[];
+}
+
 export interface Reference {
   zones: Zone[];
   locations: Location[];
@@ -181,4 +205,49 @@ export interface ChangeEvent {
   /** 알림을 보낸 탭. 자기 변경은 무시할 때 씁니다. */
   origin: string;
   message: string;
+}
+
+export interface OrderSummary extends Omit<ShipmentOrder, 'lines'> {
+  assignee: User;
+  lineCount: number;
+  units: number;
+  pickedUnits: number;
+  /** 확인을 마친 할당 수 / 전체 할당 수 */
+  pickedAllocations: number;
+  allocationCount: number;
+}
+
+export interface AllocationView extends Allocation {
+  location: Location;
+}
+
+export interface OrderLineView {
+  id: string;
+  qty: number;
+  sku: Pick<Sku, 'id' | 'code' | 'name' | 'barcode' | 'unit' | 'shape' | 'hue' | 'category'>;
+  allocations: AllocationView[];
+}
+
+export interface OrderDetail {
+  order: OrderSummary;
+  lines: OrderLineView[];
+  /** 로케이션 순서로 정렬한 피킹 동선 */
+  route: (AllocationView & { lineId: string; sku: OrderLineView['sku'] })[];
+}
+
+export interface CreateOrderRequest {
+  customer: string;
+  dueAt: string;
+  assigneeId: string;
+  lines: { skuId: string; qty: number }[];
+}
+
+export interface PickRequest {
+  pickedQty: number;
+  note?: string;
+}
+
+export interface OrderQuery {
+  status?: OrderStatus | '';
+  assigneeId?: string;
 }

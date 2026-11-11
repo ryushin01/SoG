@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { type CountLineView, skuArtUrl, ZONE_LABEL } from '@sog/domain';
-import { NetworkState, SubmitLock, toApiError, WmsHost } from '@/shared/api';
+import { NetworkState, Presence, SubmitLock, toApiError, WmsHost } from '@/shared/api';
 import { AgoPipe, DayPipe } from '@/shared/lib';
 import { StateMessage } from '@/shared/ui';
 import {
@@ -21,12 +21,22 @@ import {
   TaskStatusPill,
 } from '@/entities/count-task';
 import { ScanField } from '@/features/scan-barcode';
+import { PeerNotice } from '@/features/show-presence';
 import { Outbox } from '@/entities/outbox';
 
 @Component({
   selector: 'cnt-task-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, AgoPipe, DayPipe, StateMessage, Progress, TaskStatusPill, ScanField],
+  imports: [
+    RouterLink,
+    AgoPipe,
+    DayPipe,
+    StateMessage,
+    Progress,
+    TaskStatusPill,
+    ScanField,
+    PeerNotice,
+  ],
   templateUrl: './task-page.html',
   styleUrl: './task-page.css',
 })
@@ -85,6 +95,7 @@ export class TaskPage {
   });
 
   constructor() {
+    inject(Presence).track(() => `counts/${this.taskId()}`);
     inject(WmsHost).onChange(['*', 'counts'], (event) => {
       if (event.topics.includes('*') || event.topics.includes(`counts/${this.taskId()}`))
         this.detail.reload();

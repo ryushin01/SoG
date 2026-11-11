@@ -27,6 +27,16 @@ export const routes: Routes = [
         loadComponent: () => import('@/pages/line').then((m) => m.LinePage),
       },
       {
+        path: 'picks',
+        title: '피킹',
+        loadComponent: () => import('@/pages/picks').then((m) => m.PicksPage),
+      },
+      {
+        path: 'picks/:orderId',
+        title: '피킹',
+        loadComponent: () => import('@/pages/pick').then((m) => m.PickPage),
+      },
+      {
         path: 'settings',
         title: '보낼함·설정',
         loadComponent: () => import('@/pages/settings').then((m) => m.SettingsPage),

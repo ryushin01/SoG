@@ -15,3 +15,5 @@ test-results
 
 *storybook.log
 site
+.vercel/output
+packages/wms-api/dist

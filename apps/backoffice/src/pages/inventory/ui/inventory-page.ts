@@ -1,4 +1,4 @@
-import { httpResource } from '@angular/common/http';
+import { HttpClient, httpResource } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -21,9 +21,10 @@ import {
   type StockStatus,
   type ZoneCode,
 } from '@sog/domain';
-import { WmsHost } from '@/shared/api';
-import { AgoPipe, NumPipe, WonPipe } from '@/shared/lib';
-import { Dialog, PageHeader, Pagination, StateMessage } from '@/shared/ui';
+import { firstValueFrom } from 'rxjs';
+import { SubmitLock, toApiError, WmsHost } from '@/shared/api';
+import { AgoPipe, downloadCsv, NumPipe, today, WonPipe } from '@/shared/lib';
+import { Dialog, PageHeader, Pagination, StateMessage, Toaster } from '@/shared/ui';
 import { LocationDirectory } from '@/entities/location';
 import { SkuArt, StockStatusBadge } from '@/entities/sku';
 import { MovementForm } from '@/features/record-movement';
@@ -57,6 +58,9 @@ export class InventoryPage {
   readonly zone = input<string>('');
 
   private readonly router = inject(Router);
+  private readonly http = inject(HttpClient);
+  private readonly toaster = inject(Toaster);
+  protected readonly exportLock = new SubmitLock();
   protected readonly directory = inject(LocationDirectory);
   protected readonly categories = Object.entries(CATEGORY_LABEL) as [SkuCategory, string][];
   protected readonly statuses = Object.entries(STOCK_STATUS_LABEL) as [StockStatus, string][];
@@ -150,5 +154,68 @@ export class InventoryPage {
 
   protected categoryLabel(category: SkuCategory): string {
     return CATEGORY_LABEL[category];
+  }
+
+  /** 지금 필터·정렬 그대로 모든 페이지를 받아 CSV로 내려받습니다. */
+  protected exportCsv(): void {
+    void this.exportLock.run(async () => {
+      try {
+        const rows: SkuSummary[] = [];
+        // 시작할 때의 필터를 한 번만 읽어, 내보내는 도중 필터를 바꿔도 두 조건의 행이 섞이지 않게 합니다.
+        const query = {
+          q: this.qDebounced.value() ?? '',
+          status: this.statusFilter(),
+          category: this.categoryFilter(),
+          zone: this.zoneFilter(),
+          sort: this.sort(),
+          dir: this.dir(),
+        };
+        for (let page = 1; ; page++) {
+          const result = await firstValueFrom(
+            this.http.get<Page<SkuSummary>>('/api/skus', {
+              params: { ...query, page, size: 100 },
+            }),
+          );
+          rows.push(...result.items);
+          if (rows.length >= result.total || result.items.length === 0) break;
+        }
+        downloadCsv(
+          `sog-재고-${today()}.csv`,
+          [
+            '품목 코드',
+            '바코드',
+            '품목명',
+            '분류',
+            '단위',
+            '보유',
+            '출고 지시',
+            '가용',
+            '안전 재고',
+            '상태',
+            '단가',
+            '재고 금액',
+            '로케이션 수',
+          ],
+          rows.map((sku) => [
+            sku.code,
+            sku.barcode,
+            sku.name,
+            CATEGORY_LABEL[sku.category],
+            sku.unit,
+            sku.onHand,
+            sku.reserved,
+            sku.available,
+            sku.safetyStock,
+            STOCK_STATUS_LABEL[sku.status],
+            sku.unitCost,
+            sku.onHand * sku.unitCost,
+            sku.locationCount,
+          ]),
+        );
+        this.toaster.show(`품목 ${rows.length}개를 CSV로 내보냈습니다.`, 'success');
+      } catch (error) {
+        this.toaster.show(toApiError(error).message, 'error');
+      }
+    });
   }
 }

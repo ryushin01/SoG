@@ -6,25 +6,75 @@ export const WMS_SERVER_OPTIONS = new InjectionToken<WmsServerOptions>('WMS_SERV
   factory: () => ({ latency: [120, 380] }),
 });
 
-/** 브라우저 안의 데모 서버를 한 번만 띄우고, 다른 탭의 변경을 신호로 알려 줍니다. */
+export type WmsMode = 'local' | 'remote';
+
+const MODE_KEY = 'sog:mode';
+const POLL_VISIBLE_MS = 2_500;
+const POLL_HIDDEN_MS = 10_000;
+
+function readMode(): WmsMode | null {
+  try {
+    const value = localStorage.getItem(MODE_KEY);
+    return value === 'remote' || value === 'local' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeMode(mode: WmsMode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // 저장하지 못하면 다음에 다시 확인합니다.
+  }
+}
+
+/**
+ * 데이터를 어디에 둘지 정하고, 다른 탭·기기의 변경을 신호로 알려 줍니다.
+ * - remote: /api/health가 실제 서버를 알리면(운영 배포) 요청을 서버로 보내고, 변경 피드를 이어 받습니다.
+ * - local: 실제 서버가 없으면(개발 서버, 미리보기 배포) 브라우저 안 데모 서버를 씁니다.
+ */
 @Injectable({ providedIn: 'root' })
 export class WmsHost {
   private readonly options = inject(WMS_SERVER_OPTIONS);
   private serverPromise: Promise<WmsServer> | null = null;
+  private modePromise: Promise<WmsMode> | null = null;
+  private feedStarted = false;
   private readonly listeners = new Set<(event: ChangeEvent) => void>();
 
+  readonly mode = signal<WmsMode | null>(null);
   /** 마지막으로 받은 변경 알림 */
   readonly lastChange = signal<ChangeEvent | null>(null);
-  /** 이 탭의 서버 식별자. 자기 변경인지 구분합니다. */
-  readonly origin = signal<string | null>(null);
+  /** 이 탭의 식별자. 자기 변경인지 구분합니다. 실제 서버 모드에서는 x-sog-origin으로 보냅니다. */
+  readonly origin = signal<string>(Math.random().toString(36).slice(2, 10));
 
+  /** 실제 서버가 있는지 한 번 확인합니다. 연결이 안 되면 마지막으로 확인한 모드를 씁니다. */
+  ready(): Promise<WmsMode> {
+    this.modePromise ??= (async () => {
+      let mode: WmsMode;
+      try {
+        const response = await fetch('/api/health', {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(4000),
+        });
+        const body = response.ok ? ((await response.json()) as { mode?: string }) : null;
+        mode = body?.mode === 'remote' ? 'remote' : 'local';
+        writeMode(mode);
+      } catch {
+        // 오프라인으로 연 현장 앱이 데모 데이터로 바뀌지 않도록, 마지막으로 확인한 모드를 씁니다.
+        mode = readMode() ?? 'local';
+      }
+      this.mode.set(mode);
+      return mode;
+    })();
+    return this.modePromise;
+  }
+
+  /** 브라우저 안 데모 서버(local 모드에서만) */
   server(): Promise<WmsServer> {
     this.serverPromise ??= createWmsServer(this.options).then((server) => {
       this.origin.set(server.origin);
-      server.subscribe((event) => {
-        this.lastChange.set(event);
-        this.listeners.forEach((listener) => listener(event));
-      });
+      server.subscribe((event) => this.dispatch(event));
       return server;
     });
     return this.serverPromise;
@@ -42,10 +92,48 @@ export class WmsHost {
     };
     this.listeners.add(handler);
     destroyRef.onDestroy(() => this.listeners.delete(handler));
-    void this.server();
+    void this.start();
   }
 
   isOwn(event: ChangeEvent): boolean {
     return event.origin === this.origin();
+  }
+
+  private dispatch(event: ChangeEvent): void {
+    this.lastChange.set(event);
+    this.listeners.forEach((listener) => listener(event));
+  }
+
+  private async start(): Promise<void> {
+    const mode = await this.ready();
+    if (mode === 'local') {
+      await this.server();
+      return;
+    }
+    if (this.feedStarted) return;
+    this.feedStarted = true;
+    void this.followFeed();
+  }
+
+  /** 실제 서버의 변경 피드를 순번으로 이어 받습니다. 끊겨도 놓친 변경은 다음 요청에서 받습니다. */
+  private async followFeed(): Promise<void> {
+    let cursor: string | null = null;
+    for (;;) {
+      try {
+        const url: string = cursor === null ? '/api/changes' : `/api/changes?after=${cursor}`;
+        const response = await fetch(url, { cache: 'no-store' });
+        if (response.ok) {
+          const body = (await response.json()) as { cursor: string; items: ChangeEvent[] };
+          body.items.forEach((event) => this.dispatch(event));
+          cursor = body.cursor;
+        }
+      } catch {
+        // 오프라인이면 다음 차례에 다시 시도합니다.
+      }
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      await new Promise((resolve) =>
+        setTimeout(resolve, hidden ? POLL_HIDDEN_MS : POLL_VISIBLE_MS),
+      );
+    }
   }
 }

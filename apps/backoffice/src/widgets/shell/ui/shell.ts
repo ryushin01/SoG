@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter } from 'rxjs';
+import { WmsHost } from '@/shared/api';
 import { ToastOutlet } from '@/shared/ui';
 import { RemoteChangeNotifier } from '@/features/notify-changes';
 import { ResetDemoButton } from '@/features/reset-demo';
@@ -11,7 +12,9 @@ const NAV = [
   { index: '00', path: '/', label: '운영 현황', exact: true },
   { index: '01', path: '/inventory', label: '재고', exact: false },
   { index: '02', path: '/counts', label: '재고 실사', exact: false },
-  { index: '03', path: '/activity', label: '활동 기록', exact: false },
+  { index: '03', path: '/orders', label: '출고 지시', exact: false },
+  { index: '04', path: '/map', label: '창고 도면', exact: false },
+  { index: '05', path: '/activity', label: '활동 기록', exact: false },
 ];
 
 /** 화면 틀: 본문 바로가기, 번호 붙은 주 메뉴, 사용자 전환, 실시간 표시, 알림 */
@@ -32,9 +35,11 @@ const NAV = [
 export class Shell {
   protected readonly nav = NAV;
   protected readonly menuOpen = signal(false);
+  protected readonly host = inject(WmsHost);
   private readonly document = inject(DOCUMENT);
 
   constructor() {
+    void this.host.ready();
     let first = true;
     const subscription = inject(Router)
       .events.pipe(filter((event) => event instanceof NavigationEnd))

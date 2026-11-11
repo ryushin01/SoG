@@ -1,0 +1,46 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+
+.lines {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lines legend {
+  margin-bottom: 0.5rem;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.remove {
+  margin-top: 1.625rem;
+}
+
+.add {
+  justify-self: start;
+}
+
+@media (max-width: 36rem) {
+  .line {
+    grid-template-columns: 1fr 6rem;
+  }
+
+  .remove {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    justify-self: start;
+  }
+}
