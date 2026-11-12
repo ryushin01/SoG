@@ -70,7 +70,8 @@
 | 프레임워크 | Angular 22 (standalone, zoneless, signals, `@if`·`@for`, `@defer`, Signal Forms, `httpResource`), TypeScript 6 |
 | PWA | @angular/service-worker(SwUpdate), Web App Manifest, BarcodeDetector, Vibration API |
 | 서버·데이터 | Vercel Functions(Build Output API), Neon Postgres, node-postgres, PGlite(테스트·로컬), 브라우저 데모 서버(IndexedDB, Web Locks, BroadcastChannel) |
-| 품질 | ESLint(angular-eslint, 템플릿 접근성 규칙), Prettier, husky + lint-staged, Vitest 5 + Testing Library + fake-indexeddb, Storybook 10(angular-vite) 스토리 테스트(실제 브라우저 + axe), Playwright + axe(프로덕션 빌드·배포 사이트 E2E) |
+| 품질 | ESLint(angular-eslint, 템플릿 접근성 규칙), Prettier, husky + lint-staged, Vitest 5 + Testing Library + fake-indexeddb, Storybook 10(angular-vite) 스토리 테스트(실제 브라우저 + axe), Playwright + axe(프로덕션 빌드·배포 사이트 E2E), size-limit, Lighthouse CI |
+| 모니터링 | Sentry(DSN이 있을 때만), web-vitals (`@sog/monitoring`) |
 | 배포 | Vercel(두 앱을 한 주소로), GitHub Actions, Dependabot |
 
 ## 시작하기
@@ -90,6 +91,7 @@ pnpm dev    # 백오피스 http://localhost:4200 · 실사 앱 http://localhost:
 | `pnpm preview:api` | 실제 서버 모드로 띄움(/api를 PGlite 위의 서버가 받음, 계정·Docker 불필요) |
 | `pnpm test` | 업무 서버(브라우저·Postgres), 도메인 규칙, 두 앱 컴포넌트 테스트 |
 | `pnpm test:storybook` | 모든 스토리를 실제 브라우저에서 렌더링하고 접근성 검사 |
+| `pnpm site` → `pnpm size` / `pnpm lhci` | 배포 구조로 합친 뒤 번들 크기 / Lighthouse 기준 검사 (먼저 `build` 필요) |
 | `pnpm e2e` | 프로덕션 빌드 E2E, 데모 모드(데스크톱·모바일)와 실제 서버 모드 (`E2E_BASE_URL`을 주면 배포된 사이트 검사) |
 | `pnpm typecheck` / `pnpm lint` | 타입 검사 / ESLint와 FSD 규칙 검사(Steiger) |
 | `pnpm --filter @sog/backoffice storybook` | 백오피스 Storybook (`http://localhost:6006`) |

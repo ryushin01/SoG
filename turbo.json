@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["SENTRY_DSN"],
       "outputs": ["dist/**"]
     },
     "dev": {

@@ -1,5 +1,11 @@
 # 버전 기록
 
+## 0.3.1 - 2026-11-12
+
+- 모니터링: 두 앱이 함께 쓰는 `@sog/monitoring`. 빌드할 때 `SENTRY_DSN`이 있으면 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜 Web Vitals를 Sentry로 보냄. 오류 내용만 보내고, Sentry(약 28 kB gzip)와 web-vitals는 첫 화면 뒤에 따로 받음
+- 성능 예산: CI에서 size-limit(백오피스 JS 255 kB·CSS 3 kB, 현장 앱 JS 230 kB·CSS 2 kB)과 Lighthouse CI(대시보드·출고 지시·재고 상세·현장 앱, 데스크톱 성능 90·접근성 100·권장 사항 95·SEO 90점)로 검사
+- `robots.txt` 추가: 없어서 SPA 대체 화면(HTML)이 대신 나가던 것
+
 ## 0.3.0 - 2026-11-10
 
 - 실제 백엔드: 운영 사이트는 Vercel 함수(싱가포르)와 Neon Postgres 위에서 동작해 모든 기기가 같은 데이터를 봄. 업무 규칙은 브라우저 데모 서버와 같은 코드를 쓰고 저장 계층만 바꿈

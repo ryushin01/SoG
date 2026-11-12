@@ -19,7 +19,8 @@
       "@sog/domain": ["../../packages/domain/src/index.ts"],
       "@sog/wms-server": ["../../packages/wms-server/src/index.ts"],
       "@/*": ["./src/*"],
-      "@sog/wms-client": ["../../packages/wms-client/src/index.ts"]
+      "@sog/wms-client": ["../../packages/wms-client/src/index.ts"],
+      "@sog/monitoring": ["../../packages/monitoring/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

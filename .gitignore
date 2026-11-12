@@ -17,3 +17,4 @@ test-results
 site
 .vercel/output
 packages/wms-api/dist
+.lighthouseci

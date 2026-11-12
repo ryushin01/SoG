@@ -82,3 +82,23 @@ axe 통과만으로 끝내지 않고 아래 항목을 직접 점검했습니다.
 | 7.1.1 기본 언어 | `lang="ko"` |
 | 7.3.1 오류 정정 | 칸마다 오류 문구를 `aria-describedby`로 연결하고 `aria-invalid` 표시 |
 | 7.3.2 레이블 | 모든 입력에 보이는 `label` |
+
+## 품질 예산
+
+- **번들 크기:** `pnpm size`가 백오피스 JS 255 kB·CSS 3 kB, 현장 앱 JS 230 kB·CSS 2 kB(gzip, 화면별 조각 포함)를 넘으면 실패합니다. 기준은 `.size-limit.json`에 있습니다.
+- **Lighthouse:** `pnpm site` 뒤에 `pnpm lhci`가 배포와 같은 구조(`scripts/serve-site.mjs`, 데모 모드)로 대시보드·출고 지시·재고 상세·현장 앱을 데스크톱 기준 3번씩 재서 성능 90·접근성 100·권장 사항 95·SEO 90점, LCP 2.5초·TBT 200ms·CLS 0.1 이하인지 확인합니다. 데모 모드는 시작할 때 `/api/health`가 404인 것을 보고 정하므로, 콘솔의 404 한 건은 의도한 것입니다.
+- **템플릿 접근성:** `angular-eslint`의 `templateAccessibility` 규칙을 이미 씁니다.
+
+## 모니터링
+
+두 앱은 `packages/monitoring`(`@sog/monitoring`)의 `provideMonitoring(앱 이름, SENTRY_DSN)`을 앱 설정에 넣습니다.
+
+| 환경 변수 | 내용 |
+| --- | --- |
+| `SENTRY_DSN` | 빌드할 때 있으면(`ng build --define`) 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜(poor) Web Vitals를 Sentry로 보냅니다. 없으면 Sentry를 불러오지 않고, 개발 모드에서 Web Vitals를 콘솔에만 찍습니다 |
+
+- Angular CLI(application 빌더)는 `import.meta.env`를 쓰지 않으므로 각 앱의 `build` 스크립트가 `--define "SENTRY_DSN='$SENTRY_DSN'"`로 넣습니다. Turbo가 이 값을 빌드에 넘기도록 `turbo.json`의 `build.env`에 등록했습니다.
+- Sentry에는 오류 내용만 보내고 사용자 정보·쿠키·헤더·쿼리 문자열, 방문 기록(세션), 이동·클릭 기록(브레드크럼), 콘솔 기록, 콜백 인수는 모으지 않습니다. Sentry를 받기 전에 난 오류는 최대 20개까지 모아 두었다가 처리되지 않은 오류로 보냅니다.
+- 쓰는 함수만 `sentry.ts`에서 다시 내보내 약 28 kB(gzip)로 받습니다.
+- 서버(Vercel 함수) 오류는 Vercel 로그로 확인합니다.
+
