@@ -76,5 +76,10 @@ describe('monitoring', () => {
     expect(beforeSend({ extra: { arguments: ['secret'], other: 1 } })).toEqual({
       extra: { other: 1 },
     });
+    expect(
+      beforeSend({ request: { url: 'https://example.com/login#access_token=secret' } }),
+    ).toEqual({
+      request: { url: 'https://example.com/login' },
+    });
   });
 });
