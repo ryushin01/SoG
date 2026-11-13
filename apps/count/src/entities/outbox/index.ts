@@ -1,1 +1,1 @@
-export { type NewOutboxItem, Outbox, type OutboxItem, type OutboxState } from './model/outbox';
+export { Outbox } from './model/outbox';

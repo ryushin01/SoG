@@ -74,13 +74,18 @@ export class Presence {
     // 새로 연 탭이 다른 탭의 현재 위치를 바로 알 수 있게 물어봅니다.
     this.send({ type: 'ping' });
     // 실제 서버 모드에서는 다른 기기의 접속 정보를 서버에서 받아 옵니다.
+    // 모드를 알기 전에 이 서비스가 정리될 수 있으므로, 정리된 뒤에는 폴링을 시작하지 않습니다.
     let poll: ReturnType<typeof setInterval> | undefined;
+    let destroyed = false;
     void this.host.ready().then((mode) => {
-      if (mode !== 'remote') return;
+      if (destroyed || mode !== 'remote') return;
       void this.pull();
       poll = setInterval(() => void this.pull(), REMOTE_POLL_MS);
     });
-    inject(DestroyRef).onDestroy(() => clearInterval(poll));
+    inject(DestroyRef).onDestroy(() => {
+      destroyed = true;
+      clearInterval(poll);
+    });
   }
 
   /**

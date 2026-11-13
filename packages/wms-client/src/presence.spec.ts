@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WmsHost } from './host';
 import { ApiIdentity } from './interceptor';
 import { Presence } from './presence';
 
@@ -103,5 +104,38 @@ describe('Presence', () => {
     });
     await wait();
     expect(peers().map((p) => [p.tabId, p.editing])).toEqual([['t3', false]]);
+  });
+  /** 서버 모드인지 늦게 알려 주는 호스트 */
+  function slowHost() {
+    let resolve!: (mode: 'remote' | 'local') => void;
+    const ready = new Promise<'remote' | 'local'>((r) => (resolve = r));
+    TestBed.configureTestingModule({
+      providers: [{ provide: WmsHost, useValue: { ready: () => ready, mode: signal(null) } }],
+    });
+    return (mode: 'remote' | 'local') => resolve(mode);
+  }
+
+  it('서버 모드면 다른 기기의 접속 정보를 받아 온다', async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
+    vi.stubGlobal('fetch', fetchSpy);
+    const answer = slowHost();
+    TestBed.inject(Presence);
+    answer('remote');
+    await wait();
+    expect(fetchSpy).toHaveBeenCalledWith('/api/presence', { cache: 'no-store' });
+    vi.unstubAllGlobals();
+  });
+
+  it('서버 모드인지 알기 전에 정리되면 폴링을 시작하지 않는다', async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
+    vi.stubGlobal('fetch', fetchSpy);
+    const answer = slowHost();
+    TestBed.inject(Presence);
+    // 루트 주입기를 정리하면 Presence의 정리 함수가 불린다.
+    TestBed.resetTestingModule();
+    answer('remote');
+    await wait();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

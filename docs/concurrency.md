@@ -94,7 +94,7 @@ Web Locks가 없는 환경(Node 테스트)에서는 이름별 큐로 대신합�
 
 ### 접속 표시
 
-충돌을 잘 처리하는 것보다 충돌이 나지 않는 편이 낫습니다. `Presence`(`packages/wms-client/src/presence.ts`)는 탭마다 지금 보고 있는 자원과 상태를 5초마다 알리고(데모 모드는 `BroadcastChannel('sog-presence')`, 실제 서버는 `/api/presence`), 15초 동안 소식이 없거나 탭을 닫으면(`pagehide`) 목록에서 뺍니다. 새로 연 탭은 `ping`을 보내 다른 탭의 현재 위치를 바로 받습니다.
+충돌을 잘 처리하는 것보다 충돌이 나지 않는 편이 낫습니다. `Presence`(`packages/wms-client/src/presence.ts`)는 탭마다 지금 보고 있는 자원과 상태를 5초마다 알리고(데모 모드는 `BroadcastChannel('sog-presence')`, 실제 서버는 `/api/presence`), 15초 동안 소식이 없거나 탭을 닫으면(`pagehide`) 목록에서 뺍니다. 서버 모드인지 알기 전에 서비스가 정리되면 서버 폴링을 시작하지 않습니다. 새로 연 탭은 `ping`을 보내 다른 탭의 현재 위치를 바로 받습니다.
 
 - 품목 상세: 다른 관리자가 같은 품목을 보고 있으면 표시하고, 저장하지 않은 입력이 있으면 "수정 중"으로 강조합니다.
 - 실사 상세: 현장 작업자가 어느 품목 앞에 있는지까지 보입니다.

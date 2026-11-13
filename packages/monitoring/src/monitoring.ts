@@ -52,7 +52,8 @@ export function initMonitoring({ dsn, app, dev }: MonitoringOptions) {
       window.removeEventListener('unhandledrejection', onRejection);
     };
 
-    sentry = import('./sentry')
+    sentry = afterFirstPaint()
+      .then(() => import('./sentry'))
       .then((Sentry) => {
         Sentry.init({
           dsn,
@@ -70,7 +71,11 @@ export function initMonitoring({ dsn, app, dev }: MonitoringOptions) {
           integrations: (defaults) => defaults.filter(({ name }) => !OFF_INTEGRATIONS.has(name)),
           // 오류 내용이 아닌 것은 지웁니다. 감싼 콜백이 던진 오류에는 그 콜백의 인수(입력 이벤트 등)가 extra.arguments로 붙습니다.
           beforeSend(event) {
-            if (event.extra) delete event.extra['arguments'];
+            if (event.extra) {
+              delete event.extra['arguments'];
+              // Error가 아닌 일반 객체로 거부된 Promise는 그 필드 값(이메일·토큰 등)이 여기에 담깁니다.
+              delete event.extra['__serialized__'];
+            }
             // 주소의 # 뒤(로그인 토큰 등)는 보내지 않습니다.
             if (event.request?.url) event.request.url = event.request.url.split('#')[0];
             return event;
@@ -139,5 +144,25 @@ function captureUnhandled(Sentry: SentryModule, error: unknown, type: string) {
       return event;
     });
     Sentry.captureException(error);
+  });
+}
+
+/**
+ * 페이지를 다 받은 뒤(load) 브라우저가 한가할 때 풀립니다. 첫 화면을 그리는 동안 Sentry를 받느라 대역폭을 나눠 쓰지 않게 합니다.
+ * requestIdleCallback이 없는 브라우저(Safari 등)는 바로 다음 차례에 풉니다. 그 사이 오류는 위의 버퍼가 모읍니다.
+ * load가 10초 안에 오지 않으면 그때 바로 받기 시작합니다.
+ */
+function afterFirstPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const idle = () =>
+      'requestIdleCallback' in window
+        ? window.requestIdleCallback(() => resolve(), { timeout: 3000 })
+        : setTimeout(resolve, 0);
+    if (document.readyState === 'complete') idle();
+    else {
+      window.addEventListener('load', idle, { once: true });
+      // 끝나지 않는 요청(스트림, 멈춘 이미지 등)이 load를 붙잡아도 10초가 지나면 바로 받기 시작합니다.
+      setTimeout(resolve, 10_000);
+    }
   });
 }

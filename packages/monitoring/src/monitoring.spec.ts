@@ -39,6 +39,28 @@ describe('monitoring', () => {
     vi.resetModules();
   });
 
+  it('load가 10초 안에 오지 않으면 한가할 때를 기다리지 않고 10초에 Sentry를 받는다', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
+    // 한가한 때가 오지 않는 브라우저: 기한에 다시 requestIdleCallback을 기다리면 받지 못합니다.
+    const idleWindow = window as unknown as { requestIdleCallback?: () => number };
+    const original = idleWindow.requestIdleCallback;
+    idleWindow.requestIdleCallback = vi.fn(() => 0);
+    const { initMonitoring } = await import('./monitoring');
+    sentry.init.mockClear();
+    try {
+      initMonitoring({ dsn: 'https://key@o1.ingest.sentry.io/1', app: 'test', dev: false });
+      await vi.advanceTimersByTimeAsync(9_000);
+      expect(sentry.init).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(sentry.init).toHaveBeenCalledTimes(1));
+    } finally {
+      if (original) idleWindow.requestIdleCallback = original;
+      else delete idleWindow.requestIdleCallback;
+      vi.useRealTimers();
+    }
+  });
+
   it('DSN이 없으면 나쁜 지표와 오류를 오류 없이 넘긴다', async () => {
     const { initMonitoring, reportError, reportMetric } = await import('./monitoring');
     initMonitoring({ app: 'test', dev: false });
@@ -73,7 +95,11 @@ describe('monitoring', () => {
       ['Console', 'BrowserSession', 'Breadcrumbs', 'GlobalHandlers'].map((name) => ({ name })),
     );
     expect(kept.map(({ name }: { name: string }) => name)).toEqual(['GlobalHandlers']);
-    expect(beforeSend({ extra: { arguments: ['secret'], other: 1 } })).toEqual({
+    expect(
+      beforeSend({
+        extra: { arguments: ['secret'], __serialized__: { email: 'a@b.c' }, other: 1 },
+      }),
+    ).toEqual({
       extra: { other: 1 },
     });
     expect(
