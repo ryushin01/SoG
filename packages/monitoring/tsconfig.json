@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "experimentalDecorators": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src", "vitest.config.ts"]
+}

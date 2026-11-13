@@ -56,12 +56,19 @@ jobs:
       - run: pnpm build
       # 프로덕션 빌드를 배포 구조(/, /count/)로 합쳐 업무 흐름·접근성·화면 넘침·서비스 워커 검사
       - run: pnpm e2e
+      # 배포 구조(site/)로 합쳐 번들 크기와 Lighthouse 점수를 잽니다.
+      - run: pnpm site
+      - run: pnpm size
+      - run: pnpm lhci
         timeout-minutes: 15
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: reports
+          # .lighthouseci는 숨김 폴더라 따로 켜야 올라갑니다.
+          include-hidden-files: true
           path: |
             e2e/playwright-report/
             e2e/test-results/
+            .lighthouseci/
           retention-days: 7
