@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Actions 화면에서 main을 다시 배포할 때
+  workflow_dispatch:
 
 # 같은 브랜치에 새 커밋이 올라오면 이전 실행은 취소
 concurrency:
@@ -72,3 +74,53 @@ jobs:
             e2e/test-results/
             .lighthouseci/
           retention-days: 7
+
+  # main에 머지하면 Cloudflare Workers에 배포합니다(docs/ci-deploy.md).
+  deploy:
+    name: Cloudflare Workers 배포
+    needs: check
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 배포는 하나씩 하고, 진행 중인 배포를 취소하지 않습니다.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # 직전 푸시와 비교해 화면·서버에 영향이 없는 변경(문서·E2E·테스트·스토리·CI 설정)만 있으면 건너뜁니다.
+      - name: 배포할 변경 확인
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          deploy=true
+          if [ "${{ github.event_name }}" = push ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$BEFORE" HEAD)
+            if ! echo "$changed" | grep -qvE '(^docs/|\.md$|^e2e/|\.spec\.ts$|\.test\.ts$|\.stories\.ts$|^\.github/|^\.husky/|^\.vscode/|^\.prettier|^\.editorconfig$)'; then
+              deploy=false
+              echo "::notice::화면·서버에 영향이 없는 변경이라 배포를 건너뜁니다."
+            fi
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        if: steps.changes.outputs.deploy == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.changes.outputs.deploy == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - if: steps.changes.outputs.deploy == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.deploy == 'true'
+        run: pnpm turbo run build build-storybook --filter=@sog/backoffice --filter=@sog/count
+      - if: steps.changes.outputs.deploy == 'true'
+        run: node scripts/build-cloudflare.mjs
+      - name: Cloudflare Workers에 배포
+        if: steps.changes.outputs.deploy == 'true'
+        run: npx --yes wrangler@4.156.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

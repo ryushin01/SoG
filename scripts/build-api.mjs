@@ -1,5 +1,5 @@
-// 실제 서버(/api) 코드를 Node용 파일 하나로 묶습니다.
-// - vercel.mjs: Vercel 함수(node-postgres → Neon)
+// 로컬 미리보기·E2E의 실제 서버(/api) 코드를 Node용 파일 하나로 묶습니다.
+// (운영 Worker는 wrangler가 packages/wms-api/src/cloudflare.ts를 묶습니다.)
 // - local.mjs: 로컬 미리보기·E2E(PGlite, 메모리 Postgres). PGlite는 wasm 파일을 옆에서 읽으므로 묶지 않습니다.
 import { build } from 'esbuild';
 import { dirname, join } from 'node:path';
@@ -22,14 +22,8 @@ const common = {
 
 await build({
   ...common,
-  entryPoints: [join(pkg, 'src/vercel.ts')],
-  outfile: join(pkg, 'dist/vercel.mjs'),
-  external: ['pg-native', 'cloudflare:sockets'],
-});
-await build({
-  ...common,
   entryPoints: [join(pkg, 'src/local-server.ts')],
   outfile: join(pkg, 'dist/local.mjs'),
   external: ['@electric-sql/pglite'],
 });
-console.log('packages/wms-api/dist: vercel.mjs, local.mjs');
+console.log('packages/wms-api/dist: local.mjs');

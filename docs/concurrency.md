@@ -14,7 +14,7 @@
 
 ## 업무 서버
 
-업무 규칙은 `packages/wms-server` 한 곳에 있고, 운영에서는 Postgres 위의 Vercel 함수로, 개발·미리보기에서는 브라우저 안(IndexedDB)에서 돌립니다([실제 서버](backend.md)). 어느 쪽이든 같은 HTTP 의미를 지켜, 앱은 `HttpClient`로만 통신합니다.
+업무 규칙은 `packages/wms-server` 한 곳에 있고, 운영에서는 Postgres 위의 Cloudflare Worker로, 개발·미리보기에서는 브라우저 안(IndexedDB)에서 돌립니다([실제 서버](backend.md)). 어느 쪽이든 같은 HTTP 의미를 지켜, 앱은 `HttpClient`로만 통신합니다.
 
 - 연결: `@sog/wms-client`의 `wmsInterceptor`가 `/api/**` 요청을 실제 서버나 브라우저 안 데모 서버로 보냅니다.
 - 데모 모드의 응답 지연: 120~450ms를 일부러 넣어 경쟁 상태가 실제로 생기게 합니다.
