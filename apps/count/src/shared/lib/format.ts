@@ -3,7 +3,7 @@ import { Pipe, type PipeTransform } from '@angular/core';
 const relative = new Intl.RelativeTimeFormat('ko-KR', { numeric: 'auto' });
 const date = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
 
-export function relativeTime(iso: string, now = Date.now()): string {
+function relativeTime(iso: string, now = Date.now()): string {
   const diff = (new Date(iso).getTime() - now) / 1000;
   const abs = Math.abs(diff);
   if (abs < 45) return '방금';

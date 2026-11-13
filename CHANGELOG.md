@@ -1,5 +1,12 @@
 # 버전 기록
 
+## 0.3.2 - 2026-11-13
+
+- 메모리: 접속 표시(`Presence`)가 서버 모드인지 알기 전에 정리되면, 나중에 모드를 알게 됐을 때 서버 폴링 타이머를 시작해 멈추지 않던 문제. 정리된 뒤에는 시작하지 않음(+테스트)
+- 모니터링: Sentry를 페이지를 다 받은 뒤(load) 한가할 때 받음. load가 10초 안에 오지 않으면 그때 바로 받음. Error가 아닌 일반 객체로 거부된 Promise의 필드 값(`extra.__serialized__`)도 보내기 전에 지움(+테스트)
+- 공통화: 두 앱에 똑같던 `tsconfig.json`(45줄)의 컴파일러·Angular 옵션을 루트 `tsconfig.angular.json`으로 모음. 앱에는 경로 별칭만 남김
+- 정리: 슬라이스 공개 API의 쓰지 않는 내보내기, 파일 안에서만 쓰는 `relativeTime`·`buildLocations`의 export, 기간이 지난 `minimumReleaseAgeExclude`(steiger), README 버전 표시(0.3.0에 머물러 있던 것)
+
 ## 0.3.1 - 2026-11-12
 
 - 모니터링: 두 앱이 함께 쓰는 `@sog/monitoring`. 빌드할 때 `SENTRY_DSN`이 있으면 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜 Web Vitals를 Sentry로 보냄. 오류 내용만 보내고, Sentry(약 28 kB gzip)와 web-vitals는 첫 화면 뒤에 따로 받음. Sentry를 받는 동안 난 오류는 전역 처리기와 Angular 오류를 합쳐 20개까지만 모았다가 보냄
