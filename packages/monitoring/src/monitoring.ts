@@ -160,9 +160,14 @@ function afterFirstPaint(): Promise<void> {
         : setTimeout(resolve, 0);
     if (document.readyState === 'complete') idle();
     else {
-      window.addEventListener('load', idle, { once: true });
       // 끝나지 않는 요청(스트림, 멈춘 이미지 등)이 load를 붙잡아도 10초가 지나면 바로 받기 시작합니다.
-      setTimeout(resolve, 10_000);
+      // load가 먼저 오면 이 기한을 거두고 한가할 때를 기다립니다.
+      const deadline = setTimeout(resolve, 10_000);
+      const onLoad = () => {
+        clearTimeout(deadline);
+        idle();
+      };
+      window.addEventListener('load', onLoad, { once: true });
     }
   });
 }
