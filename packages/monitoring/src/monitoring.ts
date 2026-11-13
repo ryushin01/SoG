@@ -9,7 +9,18 @@ const MAX_EARLY_ERRORS = 20;
 const OFF_INTEGRATIONS = new Set(['BrowserSession', 'Breadcrumbs', 'Console']);
 
 let sentry: Promise<SentryModule | undefined> | undefined;
+/** Sentry를 받은 뒤에는 오류를 바로 보냅니다. */
+let ready: SentryModule | undefined;
 let logToConsole = false;
+
+/**
+ * Sentry를 받는 동안 난 오류. 전역 처리기(type 있음)와 Angular ErrorHandler(type 없음)가 함께 쓰고,
+ * 오류가 반복돼도 MAX_EARLY_ERRORS를 넘겨 쌓지 않습니다.
+ */
+const early: { error: unknown; type?: string }[] = [];
+const keep = (error: unknown, type?: string) => {
+  if (early.length < MAX_EARLY_ERRORS) early.push({ error, type });
+};
 
 export type MonitoringOptions = {
   /** Sentry DSN. 비어 있으면 Sentry를 불러오지 않습니다. */
@@ -31,10 +42,6 @@ export function initMonitoring({ dsn, app, dev }: MonitoringOptions) {
 
   if (dsn) {
     // Sentry를 받는 동안 난 오류(첫 화면 그리기 등)를 모아 두었다가, 준비되면 보냅니다.
-    const early: { error: unknown; type: string }[] = [];
-    const keep = (error: unknown, type: string) => {
-      if (early.length < MAX_EARLY_ERRORS) early.push({ error, type });
-    };
     const onError = (event: ErrorEvent) => keep(event.error ?? event.message, 'onerror');
     const onRejection = (event: PromiseRejectionEvent) =>
       keep(event.reason, 'onunhandledrejection');
@@ -70,12 +77,18 @@ export function initMonitoring({ dsn, app, dev }: MonitoringOptions) {
           },
         });
         stopBuffering();
-        for (const { error, type } of early.splice(0)) captureUnhandled(Sentry, error, type);
+        ready = Sentry;
+        for (const { error, type } of early.splice(0)) {
+          if (type) captureUnhandled(Sentry, error, type);
+          else Sentry.captureException(error);
+        }
         return Sentry;
       })
-      // Sentry를 받지 못해도 앱은 그대로 돕니다.
+      // Sentry를 받지 못해도 앱은 그대로 돕니다. 모아 둔 오류는 버리고 더 모으지 않습니다.
       .catch(() => {
         stopBuffering();
+        early.length = 0;
+        sentry = undefined;
         return undefined;
       });
   }
@@ -109,10 +122,10 @@ export function reportMetric(metric: Metric) {
   );
 }
 
-/** Angular ErrorHandler가 받은 오류를 보냅니다. */
+/** Angular ErrorHandler가 받은 오류를 보냅니다. Sentry를 받는 중이면 한도 안에서 모아 두었다가 보냅니다. */
 export function reportError(error: unknown) {
-  if (!sentry) return;
-  void sentry.then((Sentry) => Sentry?.captureException(error));
+  if (ready) ready.captureException(error);
+  else if (sentry) keep(error);
 }
 
 /**

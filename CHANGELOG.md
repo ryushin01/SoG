@@ -2,7 +2,7 @@
 
 ## 0.3.1 - 2026-11-12
 
-- 모니터링: 두 앱이 함께 쓰는 `@sog/monitoring`. 빌드할 때 `SENTRY_DSN`이 있으면 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜 Web Vitals를 Sentry로 보냄. 오류 내용만 보내고, Sentry(약 28 kB gzip)와 web-vitals는 첫 화면 뒤에 따로 받음
+- 모니터링: 두 앱이 함께 쓰는 `@sog/monitoring`. 빌드할 때 `SENTRY_DSN`이 있으면 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜 Web Vitals를 Sentry로 보냄. 오류 내용만 보내고, Sentry(약 28 kB gzip)와 web-vitals는 첫 화면 뒤에 따로 받음. Sentry를 받는 동안 난 오류는 전역 처리기와 Angular 오류를 합쳐 20개까지만 모았다가 보냄
 - 성능 예산: CI에서 size-limit(백오피스 JS 255 kB·CSS 3 kB, 현장 앱 JS 230 kB·CSS 2 kB)과 Lighthouse CI(대시보드·출고 지시·재고 상세·현장 앱, 데스크톱 성능 90·접근성 100·권장 사항 95·SEO 90점)로 검사
 - `robots.txt` 추가: 없어서 SPA 대체 화면(HTML)이 대신 나가던 것
 

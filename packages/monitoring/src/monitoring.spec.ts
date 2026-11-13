@@ -82,4 +82,24 @@ describe('monitoring', () => {
       request: { url: 'https://example.com/login' },
     });
   });
+
+  it('Sentry를 받는 동안 Angular 오류는 한도(20개)까지만 모았다가 보낸다', async () => {
+    let resolve!: () => void;
+    const loaded = new Promise<void>((done) => (resolve = done));
+    vi.doMock('./sentry', async () => {
+      await loaded;
+      return sentry;
+    });
+    sentry.captureException.mockClear();
+    const { initMonitoring, reportError } = await import('./monitoring');
+    initMonitoring({ dsn: 'https://key@o1.ingest.sentry.io/1', app: 'test', dev: false });
+    for (let i = 0; i < 50; i += 1) reportError(new Error(`angular ${i}`));
+    resolve();
+
+    await vi.waitFor(() => expect(sentry.captureException).toHaveBeenCalledTimes(20));
+    const late = new Error('after ready');
+    reportError(late);
+    expect(sentry.captureException).toHaveBeenLastCalledWith(late);
+    expect(sentry.captureException).toHaveBeenCalledTimes(21);
+  });
 });
