@@ -1,9 +1,9 @@
 {
   "name": "@sog/backoffice",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "scripts": {
     "dev": "ng serve --port 4200",
-    "build": "ng build",
+    "build": "ng build --define \"SENTRY_DSN='${SENTRY_DSN:-}'\"",
     "test": "ng test --watch=false",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "lint": "eslint . --max-warnings 0 && steiger ./src",
@@ -21,6 +21,7 @@
     "@angular/router": "^22.2.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@sog/domain": "workspace:*",
+    "@sog/monitoring": "workspace:*",
     "@sog/wms-client": "workspace:*",
     "@sog/wms-server": "workspace:*",
     "rxjs": "~7.8.0",

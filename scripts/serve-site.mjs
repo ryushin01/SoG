@@ -1,4 +1,4 @@
-// site/를 배포 환경(Vercel)과 같은 규칙으로 띄웁니다. 파일이 없으면 각 앱의 index.html로 보냅니다.
+// site/를 배포 환경(Cloudflare)과 같은 규칙으로 띄웁니다. 파일이 없으면 각 앱의 index.html로 보냅니다.
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize } from 'node:path';

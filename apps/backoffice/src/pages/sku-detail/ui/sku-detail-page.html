@@ -56,7 +56,7 @@
     </section>
 
     <section class="panel">
-      <sog-edit-sku-form [detail]="d" />
+      <sog-edit-sku-form [detail]="d" [restore]="restore()" (conflicted)="history.reload()" />
     </section>
   </div>
 
@@ -64,7 +64,7 @@
     <p class="eyebrow"><span>A</span><span>Locations</span></p>
     <h2 id="stock-title" class="block__title">로케이션별 재고</h2>
     <div class="table-wrap" tabindex="0" role="region" aria-labelledby="stock-title">
-      <table class="table" [class.stale]="detail.isLoading()">
+      <table class="table" [class.stale]="detail.isLoading()" [attr.aria-busy]="detail.isLoading()">
         <thead>
           <tr>
             <th scope="col">로케이션</th>
@@ -153,6 +153,12 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section class="block" aria-labelledby="changes-title">
+    <p class="eyebrow"><span>C</span><span>Change log</span></p>
+    <h2 id="changes-title" class="block__title">변경 이력</h2>
+    <sog-history-timeline [items]="historyItems()" (restore)="restoreFrom($event)" />
   </section>
 
   <sog-dialog

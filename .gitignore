@@ -17,3 +17,8 @@ test-results
 site
 .vercel/output
 packages/wms-api/dist
+.lighthouseci
+
+# Cloudflare Workers 로컬 개발(wrangler dev)의 비밀 값과 상태
+.dev.vars
+.wrangler/

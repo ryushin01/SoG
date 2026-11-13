@@ -186,6 +186,8 @@ export interface ApiError {
     | 'VERSION_CONFLICT'
     | 'INSUFFICIENT_STOCK'
     | 'INVALID_STATE'
+    | 'UNAUTHENTICATED'
+    | 'FORBIDDEN'
     | 'NETWORK';
   message: string;
   /** VERSION_CONFLICT일 때 서버의 최신 자원 */
@@ -250,4 +252,16 @@ export interface PickRequest {
 export interface OrderQuery {
   status?: OrderStatus | '';
   assigneeId?: string;
+}
+
+export interface LoginRequest {
+  userId: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  /** 만료 시각(초, Unix) */
+  expiresAt: number;
+  user: User;
 }

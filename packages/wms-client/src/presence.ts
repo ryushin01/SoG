@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { WmsHost } from './host';
-import { ApiIdentity } from './interceptor';
+import { AuthSession } from './auth';
 
 export interface PresenceState {
   /** 수정 중인지. 저장하지 않은 입력이 있으면 true */
@@ -45,7 +45,7 @@ const REMOTE_POLL_MS = 3_000;
  */
 @Injectable({ providedIn: 'root' })
 export class Presence {
-  private readonly identity = inject(ApiIdentity);
+  private readonly auth = inject(AuthSession);
   private readonly app = inject(PRESENCE_APP);
   private readonly host = inject(WmsHost);
   private readonly tabId = Math.random().toString(36).slice(2, 10);
@@ -74,13 +74,18 @@ export class Presence {
     // 새로 연 탭이 다른 탭의 현재 위치를 바로 알 수 있게 물어봅니다.
     this.send({ type: 'ping' });
     // 실제 서버 모드에서는 다른 기기의 접속 정보를 서버에서 받아 옵니다.
+    // 모드를 알기 전에 이 서비스가 정리될 수 있으므로, 정리된 뒤에는 폴링을 시작하지 않습니다.
     let poll: ReturnType<typeof setInterval> | undefined;
+    let destroyed = false;
     void this.host.ready().then((mode) => {
-      if (mode !== 'remote') return;
+      if (destroyed || mode !== 'remote') return;
       void this.pull();
       poll = setInterval(() => void this.pull(), REMOTE_POLL_MS);
     });
-    inject(DestroyRef).onDestroy(() => clearInterval(poll));
+    inject(DestroyRef).onDestroy(() => {
+      destroyed = true;
+      clearInterval(poll);
+    });
   }
 
   /**
@@ -91,7 +96,7 @@ export class Presence {
     effect(() => {
       const current = resource();
       const { editing = false, detail = '' } = state();
-      this.identity.userId();
+      this.auth.user();
       this.mine = current ? { resource: current, editing, detail } : null;
       if (this.mine) this.announce();
       else this.send({ type: 'leave', tabId: this.tabId });
@@ -100,6 +105,12 @@ export class Presence {
       this.mine = null;
       this.send({ type: 'leave', tabId: this.tabId });
     });
+  }
+
+  /** 로그아웃할 때 다른 탭·기기의 목록에서 바로 빠집니다. */
+  leave(): void {
+    this.mine = null;
+    this.send({ type: 'leave', tabId: this.tabId });
   }
 
   /** 같은 자원(앞부분이 같은 자원 포함)을 보고 있는 다른 탭. 같은 사람이 연 다른 탭도 따로 셉니다. */
@@ -121,7 +132,7 @@ export class Presence {
       peer: {
         ...this.mine,
         tabId: this.tabId,
-        userId: this.identity.userId(),
+        userId: this.auth.user()?.id ?? '',
         app: this.app,
         at: Date.now(),
       },
@@ -156,18 +167,25 @@ export class Presence {
     }
   }
 
+  private authHeader(): Record<string, string> {
+    const token = this.auth.token();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private sendRemote(message: Message): void {
+    if (!this.auth.token()) return;
     if (message.type === 'here') {
       const { at: _at, ...peer } = message.peer;
       void fetch('/api/presence', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...this.authHeader() },
         body: JSON.stringify(peer),
         keepalive: true,
       }).catch(() => undefined);
     } else if (message.type === 'leave') {
       void fetch(`/api/presence/${encodeURIComponent(message.tabId)}`, {
         method: 'DELETE',
+        headers: this.authHeader(),
         keepalive: true,
       }).catch(() => undefined);
     }
@@ -175,7 +193,11 @@ export class Presence {
 
   private async pull(): Promise<void> {
     try {
-      const response = await fetch('/api/presence', { cache: 'no-store' });
+      if (!this.auth.token()) return;
+      const response = await fetch('/api/presence', {
+        cache: 'no-store',
+        headers: this.authHeader(),
+      });
       if (!response.ok) return;
       const body = (await response.json()) as { items: unknown[] };
       const next = new Map<string, Peer>();

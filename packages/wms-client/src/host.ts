@@ -1,6 +1,7 @@
 import { DestroyRef, inject, Injectable, InjectionToken, signal } from '@angular/core';
 import type { ChangeEvent } from '@sog/domain';
 import { createWmsServer, type WmsServer, type WmsServerOptions } from '@sog/wms-server';
+import { AuthSession } from './auth';
 
 export const WMS_SERVER_OPTIONS = new InjectionToken<WmsServerOptions>('WMS_SERVER_OPTIONS', {
   factory: () => ({ latency: [120, 380] }),
@@ -37,6 +38,7 @@ function writeMode(mode: WmsMode): void {
 @Injectable({ providedIn: 'root' })
 export class WmsHost {
   private readonly options = inject(WMS_SERVER_OPTIONS);
+  private readonly auth = inject(AuthSession);
   private serverPromise: Promise<WmsServer> | null = null;
   private modePromise: Promise<WmsMode> | null = null;
   private feedStarted = false;
@@ -57,9 +59,18 @@ export class WmsHost {
           cache: 'no-store',
           signal: AbortSignal.timeout(4000),
         });
-        const body = response.ok ? ((await response.json()) as { mode?: string }) : null;
-        mode = body?.mode === 'remote' ? 'remote' : 'local';
-        writeMode(mode);
+        if (response.ok) {
+          const body = (await response.json()) as { mode?: string };
+          mode = body.mode === 'remote' ? 'remote' : 'local';
+          writeMode(mode);
+        } else if (response.status === 404 || response.status === 503) {
+          // 404: API가 없는 정적 배포, 503: DB를 연결하지 않은 배포. 둘 다 데모 모드입니다.
+          mode = 'local';
+          writeMode(mode);
+        } else {
+          // 서버 일시 오류(500 등)로 실제 서버 사용자를 데모 데이터로 보내지 않습니다.
+          mode = readMode() ?? 'local';
+        }
       } catch {
         // 오프라인으로 연 현장 앱이 데모 데이터로 바뀌지 않도록, 마지막으로 확인한 모드를 씁니다.
         mode = readMode() ?? 'local';
@@ -121,8 +132,12 @@ export class WmsHost {
     for (;;) {
       try {
         const url: string = cursor === null ? '/api/changes' : `/api/changes?after=${cursor}`;
-        const response = await fetch(url, { cache: 'no-store' });
-        if (response.ok) {
+        const token = this.auth.token();
+        // 로그인하기 전에는 변경을 받지 않습니다.
+        const response = token
+          ? await fetch(url, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } })
+          : null;
+        if (response?.ok) {
           const body = (await response.json()) as { cursor: string; items: ChangeEvent[] };
           body.items.forEach((event) => this.dispatch(event));
           cursor = body.cursor;

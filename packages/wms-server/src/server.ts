@@ -20,6 +20,11 @@ import {
   type CountTask,
   type CountTaskDetail,
   type CountTaskSummary,
+  type HistoryChange,
+  type HistoryEntry,
+  type HistoryKind,
+  type LoginRequest,
+  type LoginResponse,
   type CreateOrderRequest,
   type OrderDetail,
   type OrderSummary,
@@ -48,6 +53,7 @@ import {
 } from '@sog/domain';
 import { Database, STORES, type WriteOp } from './idb';
 import { createLock, type Lock } from './lock';
+import { DEMO_PASSWORD, issueToken, LOCAL_AUTH_SECRET, verifyToken } from './auth';
 import { broadcastPublisher, type ChangePublisher, type Storage } from './storage';
 import { createSeed, ZONES } from './seed';
 
@@ -77,6 +83,14 @@ export interface WmsServerOptions {
   lock?: Lock;
   /** 변경 알림. 없으면 BroadcastChannel을 씁니다. */
   publisher?: ChangePublisher;
+  /** 로그인 토큰 서명 키. 없으면 데모 모드용 고정 값을 씁니다. */
+  authSecret?: string;
+  /**
+   * 저장된 시드 버전이 다르면 데이터를 지우고 다시 채울지.
+   * 브라우저 안 데모(IndexedDB)만 기본으로 켭니다. 실제 서버는 배포 중 옛 인스턴스와 새 인스턴스가 함께 돌면서
+   * 서로를 낡았다고 보고 데이터를 거듭 지울 수 있으므로, 시드가 아예 없을 때만 채웁니다.
+   */
+  reseedOnVersionChange?: boolean;
 }
 
 export interface WmsServer {
@@ -129,8 +143,8 @@ interface IdempotencyRecord {
 type Handler = (ctx: Context, params: Record<string, string>) => Promise<ServerResponse>;
 
 const SEED_KEY = 'seed';
-/** 시드 구성이 바뀌면 올립니다. 저장된 시드 버전이 다르면 처음 상태로 다시 채웁니다. */
-const SEED_VERSION = 2;
+/** 시드 구성이 바뀌면 올립니다. 데모 모드는 저장된 시드 버전이 다르면 처음 상태로 다시 채웁니다. */
+const SEED_VERSION = 3;
 
 export async function createWmsServer(options: WmsServerOptions = {}): Promise<WmsServer> {
   const dbName = options.dbName ?? 'sog-wms';
@@ -139,6 +153,8 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   const origin = Math.random().toString(36).slice(2, 10);
   const lock: Lock = options.lock ?? createLock(`${dbName}:write`);
   const db: Storage = options.storage ?? (await Database.open(dbName));
+  const authSecret = options.authSecret ?? LOCAL_AUTH_SECRET;
+  const nowSeconds = () => Math.floor(now().getTime() / 1000);
   const publisher =
     options.publisher ?? broadcastPublisher(options.channelName ?? `${dbName}:changes`);
 
@@ -146,9 +162,15 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   const newId = (prefix: string) =>
     `${prefix}-${now().getTime().toString(36)}${(seq++).toString(36)}${origin.slice(0, 3)}`;
 
+  const reseedOnVersionChange = options.reseedOnVersionChange ?? !options.storage;
+
   async function ensureSeed(): Promise<void> {
-    const seeded = async () =>
-      (await db.get<{ version?: number }>('meta', SEED_KEY))?.version === SEED_VERSION;
+    const seeded = async () => {
+      const meta = await db.get<{ version?: number }>('meta', SEED_KEY);
+      return reseedOnVersionChange
+        ? meta?.version === SEED_VERSION
+        : meta !== undefined && meta !== null;
+    };
     if (await seeded()) return;
     await lock(async () => {
       // 다른 탭이 잠금을 먼저 잡고 시드를 넣었을 수 있습니다.
@@ -217,6 +239,13 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       });
     }
     return Promise.resolve();
+  }
+
+  /** 작업자는 자기에게 배정된 작업만 할 수 있습니다. 관리자는 모두 할 수 있습니다. */
+  function requireAssignee(ctx: Context, assigneeId: string): void {
+    if (ctx.user.role !== 'manager' && ctx.user.id !== assigneeId) {
+      throw new HttpError(403, 'FORBIDDEN', '배정된 작업자만 할 수 있습니다.');
+    }
   }
 
   function touch<T extends { version: number; updatedAt: string; updatedBy: string }>(
@@ -377,6 +406,38 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       const result = await work();
       const at = now().toISOString();
       const ops = [...result.ops];
+      // 품목·재고·실사 항목이 바뀌면 이전 문서와 비교해 변경 이력을 남깁니다(어느 업무로 바뀌었든 빠짐없이).
+      const reason = result.activity[0]?.message ?? '';
+      const locations = await load.locations();
+      for (const op of result.ops) {
+        if (!('put' in op)) continue;
+        const kind = STORE_KIND[op.store];
+        if (!kind) continue;
+        const after = op.put as Record<string, unknown> & { id: string; version?: number };
+        const before = await db.get<Record<string, unknown>>(op.store, after.id);
+        const changes = diff(kind, before, after);
+        if (changes.length === 0) continue;
+        const skuId = kind === 'sku' ? after.id : String(after['skuId']);
+        const locationId = kind === 'sku' ? null : String(after['locationId']);
+        ops.push({
+          store: 'history',
+          put: row<HistoryEntry>({
+            id: newId('hi'),
+            kind,
+            docId: after.id,
+            skuId,
+            version: after.version ?? 0,
+            at,
+            by: ctx.user.id,
+            reason,
+            locationCode: locationId
+              ? (locations.find((l) => l.id === locationId)?.code ?? null)
+              : null,
+            changes,
+            blocked: false,
+          }),
+        });
+      }
       for (const item of result.activity) {
         ops.push({
           store: 'activity',
@@ -430,6 +491,32 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       '/api/reference',
       async () =>
         json(200, { zones: ZONES, locations: await load.locations(), users: await load.users() }),
+    ],
+    [
+      'POST',
+      '/api/auth/login',
+      async (ctx) => {
+        const body = (ctx.body ?? {}) as Partial<LoginRequest>;
+        const user = (await load.users()).find((u) => u.id === body.userId);
+        // 데모 계정의 비밀번호는 공개 값입니다(로그인 화면에 안내). 계정이 없거나 틀리면 같은 문구로 답합니다.
+        if (!user || typeof body.password !== 'string' || body.password !== DEMO_PASSWORD) {
+          throw new HttpError(401, 'UNAUTHENTICATED', '계정이나 비밀번호가 맞지 않습니다.');
+        }
+        const { token, expiresAt } = await issueToken(authSecret, user.id, nowSeconds());
+        return json(200, { token, expiresAt, user } satisfies LoginResponse);
+      },
+    ],
+    [
+      'GET',
+      '/api/skus/:id/history',
+      async (_ctx, { id }) => {
+        await mustGet<Sku>('skus', id!, '품목');
+        const items = (await db.all<HistoryEntry>('history'))
+          .filter((entry) => entry.skuId === id)
+          .sort((a, b) => b.at.localeCompare(a.at))
+          .slice(0, 60);
+        return json(200, { items });
+      },
     ],
     ['GET', '/api/dashboard', async () => json(200, await dashboard())],
     ['GET', '/api/locations/overview', async () => json(200, { items: await locationOverview() })],
@@ -913,8 +1000,6 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   }
 
   async function createOrder(ctx: Context, request: CreateOrderRequest): Promise<MutationResult> {
-    if (ctx.user.role !== 'manager')
-      throw new HttpError(409, 'INVALID_STATE', '출고 지시는 관리자만 만들 수 있습니다.');
     const customer = text(request?.customer, '고객사', 40);
     const users = await load.users();
     const assignee = users.find(
@@ -1034,6 +1119,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     request: PickRequest,
   ): Promise<MutationResult> {
     const order = await mustGet<ShipmentOrder>('orders', orderId, '출고 지시');
+    requireAssignee(ctx, order.assigneeId);
     await requireVersion(ctx, order, () => orderDetail(orderId));
     if (order.status !== 'reserved' && order.status !== 'picking') {
       throw new HttpError(
@@ -1096,8 +1182,6 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   }
 
   async function shipOrder(ctx: Context, id: string): Promise<MutationResult> {
-    if (ctx.user.role !== 'manager')
-      throw new HttpError(409, 'INVALID_STATE', '출고 확정은 관리자만 할 수 있습니다.');
     const order = await mustGet<ShipmentOrder>('orders', id, '출고 지시');
     await requireVersion(ctx, order, () => orderDetail(id));
     if (order.status !== 'picked') {
@@ -1175,8 +1259,6 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   }
 
   async function cancelOrder(ctx: Context, id: string): Promise<MutationResult> {
-    if (ctx.user.role !== 'manager')
-      throw new HttpError(409, 'INVALID_STATE', '관리자만 취소할 수 있습니다.');
     const order = await mustGet<ShipmentOrder>('orders', id, '출고 지시');
     await requireVersion(ctx, order, () => orderDetail(id));
     if (order.status === 'shipped' || order.status === 'cancelled') {
@@ -1369,8 +1451,6 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   }
 
   async function createCount(ctx: Context, request: CreateCountRequest): Promise<MutationResult> {
-    if (ctx.user.role !== 'manager')
-      throw new HttpError(409, 'INVALID_STATE', '실사 작업은 관리자만 만들 수 있습니다.');
     const title = text(request?.title, '작업 이름', 60);
     if (!ZONES.some((zone) => zone.code === request.zone))
       throw new HttpError(400, 'VALIDATION', '구역을 선택해 주세요.');
@@ -1486,6 +1566,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   ): Promise<ServerResponse> {
     return mutate(ctx, `${to}:${id}`, async () => {
       const task = await mustGet<CountTask>('counts', id, '실사 작업');
+      if (to === 'in_progress' || to === 'submitted') requireAssignee(ctx, task.assigneeId);
       await requireVersion(ctx, task, () => taskDetail(id));
       if (!from.includes(task.status)) {
         throw new HttpError(
@@ -1523,6 +1604,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     const line = await mustGet<CountLine>('countLines', lineId, '실사 항목');
     if (line.taskId !== taskId)
       throw new HttpError(404, 'NOT_FOUND', '실사 항목을 찾을 수 없습니다.');
+    requireAssignee(ctx, task.assigneeId);
     const current = async () => lineView((await db.get<CountLine>('countLines', lineId))!);
     if (!['open', 'in_progress'].includes(task.status)) {
       throw new HttpError(
@@ -1603,8 +1685,6 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   }
 
   async function approveCount(ctx: Context, id: string): Promise<MutationResult> {
-    if (ctx.user.role !== 'manager')
-      throw new HttpError(409, 'INVALID_STATE', '관리자만 승인할 수 있습니다.');
     const task = await mustGet<CountTask>('counts', id, '실사 작업');
     await requireVersion(ctx, task, () => taskDetail(id));
     if (task.status !== 'submitted') {
@@ -1623,11 +1703,17 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     const at = now().toISOString();
     const ops: WriteOp[] = [];
     let adjusted = 0;
+    const short: { skuId: string; target: number; reserved: number }[] = [];
     for (const line of lines.filter((l) => l.taskId === id)) {
       const stock = stocks.find((s) => s.id === line.stockId);
       if (!stock || line.countedQty === null) continue;
       // 센 뒤에 일어난 입출고는 실사 수량 위에 그대로 반영합니다.
       const target = settledOnHand(line.countedQty, netMoved(movements, line, line.countedAt));
+      // 출고 예약보다 적게 확정하면 피킹·출고가 없는 재고를 내보내게 됩니다.
+      if (target < stock.reserved) {
+        short.push({ skuId: line.skuId, target, reserved: stock.reserved });
+        continue;
+      }
       const delta = target - stock.onHand;
       if (delta === 0) continue;
       adjusted++;
@@ -1648,6 +1734,21 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
           by: ctx.user.id,
         }),
       });
+    }
+    if (short.length > 0) {
+      const skus = await load.skus();
+      const list = short
+        .map(
+          (s) =>
+            `${skus.find((k) => k.id === s.skuId)?.name ?? s.skuId}(확정 ${s.target}, 예약 ${s.reserved})`,
+        )
+        .join(', ');
+      throw new HttpError(
+        409,
+        'INSUFFICIENT_STOCK',
+        `실사 수량이 출고 예약보다 적은 품목이 있어 승인할 수 없습니다: ${list}. 출고 지시를 먼저 조정하거나 재실사를 요청해 주세요.`,
+        await taskDetail(id),
+      );
     }
     const next = touch({ ...task, status: 'approved' as const, approvedAt: at }, ctx.user);
     ops.push({ store: 'counts', put: next });
@@ -1673,6 +1774,65 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     };
   }
 
+  /** 412로 막힌 시도를 이력으로 남깁니다. 품목 정보 수정과 재고 조정만 시도한 값을 알 수 있습니다. */
+  function blockedHistory(
+    path: string,
+    body: unknown,
+    current: unknown,
+    sentVersion: string | null,
+    user: User,
+    at: string,
+  ): { id: string } | null {
+    const version = Number((sentVersion ?? '').replaceAll('"', ''));
+    const attempt = (body ?? {}) as Record<string, unknown>;
+    const skuMatch = /^\/api\/skus\/([^/]+)$/.exec(path);
+    if (skuMatch && current && typeof current === 'object' && 'sku' in current) {
+      const latest = (current as SkuDetail).sku as unknown as Record<string, unknown>;
+      const changes = diff('sku', latest, { ...latest, ...attempt });
+      if (changes.length === 0) return null;
+      return row<HistoryEntry>({
+        id: newId('hi'),
+        kind: 'sku',
+        docId: skuMatch[1]!,
+        skuId: skuMatch[1]!,
+        version,
+        at,
+        by: user.id,
+        reason: `${user.name}님의 수정이 버전 충돌로 막혔습니다.`,
+        locationCode: null,
+        changes,
+        blocked: true,
+      });
+    }
+    const stockMatch = /^\/api\/stocks\/([^/]+)\/adjust$/.exec(path);
+    if (stockMatch && current && typeof current === 'object' && 'stocks' in current) {
+      const detail = current as SkuDetail;
+      const stock = detail.stocks.find((s) => s.id === stockMatch[1]);
+      if (!stock || typeof attempt['onHand'] !== 'number') return null;
+      return row<HistoryEntry>({
+        id: newId('hi'),
+        kind: 'stock',
+        docId: stock.id,
+        skuId: stock.skuId,
+        version,
+        at,
+        by: user.id,
+        reason: `${user.name}님의 재고 조정이 버전 충돌로 막혔습니다.`,
+        locationCode: stock.location.code,
+        changes: [
+          {
+            field: 'onHand',
+            label: '보유',
+            before: stock.onHand,
+            after: attempt['onHand'] as number,
+          },
+        ],
+        blocked: true,
+      });
+    }
+    return null;
+  }
+
   // ---------- 진입점 ----------
   async function handle(request: ServerRequest): Promise<ServerResponse> {
     if (maxDelay > 0) {
@@ -1686,6 +1846,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       const key = Object.keys(request.headers).find((k) => k.toLowerCase() === name.toLowerCase());
       return key ? (request.headers[key] ?? null) : null;
     };
+    let caller: User | null = null;
     try {
       await ensureSeed();
       for (const [routeMethod, pattern, handler] of routes) {
@@ -1693,14 +1854,29 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         const params = match(pattern, url.pathname);
         if (!params) continue;
         const users = await load.users();
-        const userId = header('x-sog-user') ?? 'u-kim';
-        const user = users.find((u) => u.id === userId) ?? users[0]!;
+        const key = `${method} ${pattern}`;
+        if (!PUBLIC_ROUTES.has(key)) {
+          // Authorization: Bearer <토큰>. 서명·만료를 확인해 사용자를 정합니다.
+          const raw = header('authorization');
+          const token = raw?.startsWith('Bearer ') ? raw.slice(7).trim() : null;
+          const userId = token ? await verifyToken(authSecret, token, nowSeconds()) : null;
+          caller = users.find((u) => u.id === userId) ?? null;
+          if (!caller)
+            throw new HttpError(
+              401,
+              'UNAUTHENTICATED',
+              '로그인이 필요합니다. 다시 로그인해 주세요.',
+            );
+          if (MANAGER_ROUTES.has(key) && caller.role !== 'manager') {
+            throw new HttpError(403, 'FORBIDDEN', '관리자만 할 수 있습니다.');
+          }
+        }
         const rawIfMatch = header('if-match');
         const ifMatch =
           rawIfMatch === null ? null : Number(rawIfMatch.replace(/^W\//, '').replaceAll('"', ''));
         return await handler(
           {
-            user,
+            user: caller ?? users[0]!,
             origin: header('x-sog-origin') ?? origin,
             ifMatch: ifMatch === null || Number.isNaN(ifMatch) ? null : ifMatch,
             idempotencyKey: header('idempotency-key'),
@@ -1713,21 +1889,31 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       throw new HttpError(404, 'NOT_FOUND', `${method} ${url.pathname} 경로가 없습니다.`);
     } catch (error) {
       if (error instanceof HttpError) {
-        if (error.code === 'VERSION_CONFLICT') {
-          const userId = header('x-sog-user') ?? 'u-kim';
-          void db.write([
+        if (error.code === 'VERSION_CONFLICT' && caller) {
+          const at = now().toISOString();
+          const ops: WriteOp[] = [
             {
               store: 'activity',
               put: row<Activity>({
                 id: newId('ac'),
                 kind: 'conflict',
-                message: `동시 수정 충돌을 막았습니다: ${method} ${url.pathname} (보낸 버전 ${header('if-match')})`,
-                at: now().toISOString(),
-                by: userId,
+                message: `${caller.name}님의 저장을 동시 수정 충돌로 막았습니다: ${method} ${url.pathname} (보낸 버전 ${header('if-match')})`,
+                at,
+                by: caller.id,
                 target: null,
               }),
             },
-          ]);
+          ];
+          const blocked = blockedHistory(
+            url.pathname,
+            request.body,
+            error.current,
+            header('if-match'),
+            caller,
+            at,
+          );
+          if (blocked) ops.push({ store: 'history', put: blocked });
+          void db.write(ops).catch(() => undefined);
         }
         const body: ApiError = { code: error.code, message: error.message };
         if (error.current !== undefined) body.current = error.current;
@@ -1764,6 +1950,52 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       db.close();
     },
   };
+}
+
+/** 로그인 없이 부를 수 있는 라우트. 로그인 화면이 계정 목록을 보여 주려고 기준 정보를 씁니다. */
+const PUBLIC_ROUTES = new Set(['POST /api/auth/login', 'GET /api/reference']);
+
+/** 관리자만 부를 수 있는 라우트. 작업자는 배정된 실사·피킹만 합니다(처리기에서 담당자 확인). */
+const MANAGER_ROUTES = new Set([
+  'PATCH /api/skus/:id',
+  'POST /api/stocks/:id/adjust',
+  'POST /api/movements',
+  'POST /api/counts',
+  'POST /api/counts/:id/cancel',
+  'POST /api/counts/:id/approve',
+  'POST /api/counts/:id/lines/:lineId/recount',
+  'POST /api/orders',
+  'POST /api/orders/:id/ship',
+  'POST /api/orders/:id/cancel',
+  'POST /api/_reset',
+]);
+
+/** 변경 이력에 남길 필드와 화면 이름 */
+const TRACKED: Record<HistoryKind, Record<string, string>> = {
+  sku: { name: '품목명', safetyStock: '안전 재고', unitCost: '단가', description: '설명' },
+  stock: { onHand: '보유', reserved: '출고 지시' },
+  countLine: { countedQty: '센 수량', note: '메모', status: '상태' },
+};
+
+const STORE_KIND: Partial<Record<string, HistoryKind>> = {
+  skus: 'sku',
+  stocks: 'stock',
+  countLines: 'countLine',
+};
+
+function diff(
+  kind: HistoryKind,
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown>,
+): HistoryChange[] {
+  return Object.entries(TRACKED[kind])
+    .filter(([field]) => (before?.[field] ?? null) !== (after[field] ?? null))
+    .map(([field, label]) => ({
+      field,
+      label,
+      before: (before?.[field] ?? null) as string | number | null,
+      after: (after[field] ?? null) as string | number | null,
+    }));
 }
 
 /** 쓰기 목록에 넣을 행. 타입을 확인한 뒤 저장소 공통 형태로 넘깁니다. */

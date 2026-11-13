@@ -9,13 +9,13 @@ apps/
 packages/
 ├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
 ├─ wms-server/   업무 서버(규칙, ETag, 멱등 키, 예약). 저장 계층을 갈아 끼움(IndexedDB/Postgres)
-├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Vercel 함수 진입점
+├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Cloudflare Worker 진입점
 └─ wms-client/   Angular 연결 (HttpClient 인터셉터, 변경 알림, 네트워크 상태, 중복 제출 잠금)
 e2e/             프로덕션 빌드 E2E (Playwright + axe)
-scripts/         배포 구조 조립, 정적 서버, API 번들, Vercel 배포물
+scripts/         배포 구조 조립(Cloudflare 정적 자산), 정적 서버, API 번들
 ```
 
-공유 패키지는 빌드하지 않고 TypeScript 소스를 그대로 씁니다. 앱의 `tsconfig.json` `paths`가 `@sog/*`를 각 패키지의 `src/index.ts`로 연결해, Angular 컴파일러가 앱 코드와 함께 컴파일합니다(데코레이터가 있는 `wms-client`도 마찬가지).
+공유 패키지는 빌드하지 않고 TypeScript 소스를 그대로 씁니다. 앱의 `tsconfig.json` `paths`가 `@sog/*`를 각 패키지의 `src/index.ts`로 연결해, Angular 컴파일러가 앱 코드와 함께 컴파일합니다(데코레이터가 있는 `wms-client`도 마찬가지). 두 앱이 함께 쓰는 컴파일러·Angular 옵션은 루트의 `tsconfig.angular.json`에 있고, 앱마다 다른 경로 별칭만 각 앱의 `tsconfig.json`에 둡니다.
 
 ## Angular 사용 방식
 
@@ -56,11 +56,13 @@ pnpm dev
 
 | 명령 | 내용 |
 |---|---|
-| `pnpm test` | 업무 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 출고 지시 경쟁·피킹·출고, 탭 간 알림), 실제 서버(PGlite 위에서 트랜잭션 잠금, 변경 피드, 접속 표시), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
+| `pnpm test` | 업무 서버(동시 출고, 멱등 재전송, 재실사 충돌, 승인 정산, 출고 지시 경쟁·피킹·출고, 탭 간 알림, 로그인·역할, 변경 이력), 실제 서버(PGlite 위에서 트랜잭션 잠금, 변경 피드, 접속 표시, 재시드 방지), 도메인 규칙, 두 앱 컴포넌트(Vitest + Testing Library, jsdom + fake-indexeddb) |
 | `pnpm test:storybook` | 모든 스토리를 Chromium에서 렌더링하고 axe 검사(`@storybook/addon-vitest`, `a11y.test: 'error'`) |
-| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데모 모드(데스크톱·모바일)와 실제 서버 모드(PGlite)에서 출고 지시·피킹, 업무 흐름, 동시 수정 충돌, 접속 표시, 창고 도면, CSV 내려받기, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
+| `pnpm e2e` | 두 앱 프로덕션 빌드를 `/`·`/count/`로 합쳐 데모 모드(데스크톱·모바일)와 실제 서버 모드(PGlite)에서 로그인·역할, 변경 이력, 출고 지시·피킹, 업무 흐름, 동시 수정 충돌, 접속 표시, 창고 도면, CSV 내려받기, 오프라인 동기화, 서비스 워커, axe, 가로 넘침 검사 |
 
-컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 같은 DB를 여는 서버를 하나 더 만들면 "다른 탭의 사용자"가 되어 충돌을 재현할 수 있습니다.
+컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 같은 DB를 여는 서버를 하나 더 만들면 "다른 탭의 사용자"가 되어 충돌을 재현할 수 있습니다. 로그인이 필요한 컴포넌트와 스토리는 `seedTestSession(user)`로 데모 서명 키의 토큰을 미리 넣고 시작합니다.
+
+데모 계정의 비밀번호는 모두 `sog-demo`입니다. 백오피스는 관리자(김하늘·박도윤), 현장 앱은 작업자(이서준·최민아·정우진)로 로그인합니다.
 
 ## 접근성 점검 (KWCAG 2.2)
 
@@ -82,3 +84,24 @@ axe 통과만으로 끝내지 않고 아래 항목을 직접 점검했습니다.
 | 7.1.1 기본 언어 | `lang="ko"` |
 | 7.3.1 오류 정정 | 칸마다 오류 문구를 `aria-describedby`로 연결하고 `aria-invalid` 표시 |
 | 7.3.2 레이블 | 모든 입력에 보이는 `label` |
+
+## 품질 예산
+
+- **번들 크기:** `pnpm size`가 백오피스 JS 255 kB·CSS 3 kB, 현장 앱 JS 230 kB·CSS 2 kB(gzip, 화면별 조각 포함)를 넘으면 실패합니다. 기준은 `.size-limit.json`에 있습니다.
+- **Lighthouse:** `pnpm site` 뒤에 `pnpm lhci`가 배포와 같은 구조(`scripts/serve-site.mjs`, 데모 모드)로 두 앱의 첫 화면(백오피스 로그인, 현장 앱 로그인)을 데스크톱 기준 3번씩 재서 성능 90·접근성 100·권장 사항 95·SEO 90점, LCP 2.5초·TBT 200ms·CLS 0.1 이하인지 확인합니다. 데모 모드는 시작할 때 `/api/health`가 404인 것을 보고 정하므로, 콘솔의 404 한 건은 의도한 것입니다. 로그인 뒤 화면은 재지 않습니다. 백오피스 토큰은 탭마다 따로인 `sessionStorage`에 있어 Lighthouse가 여는 새 탭에 넘길 수 없기 때문입니다. 로그인 뒤 화면의 접근성(axe)과 가로 넘침은 E2E가 검사합니다.
+- **템플릿 접근성:** `angular-eslint`의 `templateAccessibility` 규칙을 이미 씁니다.
+
+## 모니터링
+
+두 앱은 `packages/monitoring`(`@sog/monitoring`)의 `provideMonitoring(앱 이름, SENTRY_DSN)`을 앱 설정에 넣습니다.
+
+| 환경 변수 | 내용 |
+| --- | --- |
+| `SENTRY_DSN` | 빌드할 때 있으면(`ng build --define`) 처리하지 못한 오류, Angular `ErrorHandler`가 받은 오류, 나쁜(poor) Web Vitals를 Sentry로 보냅니다. 없으면 Sentry를 불러오지 않고, 개발 모드에서 Web Vitals를 콘솔에만 찍습니다 |
+
+- Angular CLI(application 빌더)는 `import.meta.env`를 쓰지 않으므로 각 앱의 `build` 스크립트가 `--define "SENTRY_DSN='$SENTRY_DSN'"`로 넣습니다. Turbo가 이 값을 빌드에 넘기도록 `turbo.json`의 `build.env`에 등록했습니다.
+- Sentry는 페이지를 다 받은 뒤(load) 브라우저가 한가할 때 받고, load가 10초 안에 오지 않으면 그때 바로 받습니다.
+- Sentry에는 오류 내용만 보내고 사용자 정보·쿠키·헤더·쿼리 문자열, 방문 기록(세션), 이동·클릭 기록(브레드크럼), 콘솔 기록, 콜백 인수, Error가 아닌 일반 객체로 거부된 Promise의 필드 값(`extra.__serialized__`)은 모으지 않습니다. Sentry를 받기 전에 난 오류는 최대 20개까지 모아 두었다가 처리되지 않은 오류로 보냅니다.
+- 쓰는 함수만 `sentry.ts`에서 다시 내보내 약 28 kB(gzip)로 받습니다.
+- 서버(Cloudflare Worker) 오류는 Cloudflare 대시보드의 Workers 로그나 `npx wrangler tail sog`로 확인합니다.
+

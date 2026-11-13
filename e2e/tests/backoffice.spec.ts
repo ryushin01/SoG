@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { expectAccessibleLayout, resetDemo } from './helpers';
+import { expectAccessibleLayout, loginBackoffice, resetDemo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await resetDemo(page);
+  await loginBackoffice(page);
 });
 
 test('주요 화면이 열리고 접근성 검사를 통과한다', async ({ page }) => {
@@ -37,23 +38,22 @@ test('두 관리자가 같은 품목을 고치면 늦게 저장한 쪽이 충돌
   context,
 }) => {
   const other = await context.newPage();
-  await other.goto('/inventory/sku-10201');
-  await other.getByLabel('사용자').selectOption('u-park');
+  await loginBackoffice(other, '박도윤', '/inventory/sku-10201');
   await page.goto('/inventory/sku-10201');
   await expect(page.getByRole('form', { name: '기본 정보' }).getByText('v1')).toBeVisible();
   await expect(other.getByRole('form', { name: '기본 정보' }).getByText('v1')).toBeVisible();
 
   // 김하늘이 먼저 고치기 시작합니다.
-  await page.getByLabel('안전 재고').fill('12');
+  await page.getByLabel('안전 재고', { exact: true }).fill('12');
 
   // 그사이 박도윤 탭이 저장합니다.
-  await other.getByLabel('안전 재고').fill('77');
+  await other.getByLabel('안전 재고', { exact: true }).fill('77');
   await other.getByRole('button', { name: '저장', exact: true }).click();
   await expect(other.getByRole('form', { name: '기본 정보' }).getByText('v2')).toBeVisible();
 
   // 김하늘 탭은 입력을 덮어쓰지 않고, 다른 사람이 바꿨다고 알려 줍니다.
   await expect(page.getByText(/이 품목을 방금 수정했습니다/)).toBeVisible();
-  await expect(page.getByLabel('안전 재고')).toHaveValue('12');
+  await expect(page.getByLabel('안전 재고', { exact: true })).toHaveValue('12');
 
   await page.getByRole('button', { name: '저장', exact: true }).click();
   const conflict = page.getByRole('alert').filter({ hasText: '동시 수정 충돌' });
@@ -63,7 +63,7 @@ test('두 관리자가 같은 품목을 고치면 늦게 저장한 쪽이 충돌
   await conflict.getByRole('button', { name: '내 입력으로 다시 저장' }).click();
   await expect(page.getByRole('form', { name: '기본 정보' }).getByText('v3')).toBeVisible();
   // 박도윤 탭은 고치던 중이 아니므로 최신 값으로 저절로 바뀝니다.
-  await expect(other.getByLabel('안전 재고')).toHaveValue('12');
+  await expect(other.getByLabel('안전 재고', { exact: true })).toHaveValue('12');
 });
 
 test('실사 검토 화면에서 승인하면 재고에 반영된다', async ({ page }) => {

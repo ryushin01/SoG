@@ -1,51 +1,45 @@
 import { HttpClient } from '@angular/common/http';
-import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import type { Reference, User } from '@sog/domain';
-import { ApiIdentity } from '@/shared/api';
+import { AuthSession, Presence } from '@/shared/api';
 
-const OPERATOR_KEY = 'sog:count:operator';
 const USERS_KEY = 'sog:count:users';
 
-function read(key: string): string | null {
+function readUsers(): User[] {
   try {
-    return localStorage.getItem(key);
+    return JSON.parse(localStorage.getItem(USERS_KEY) ?? '[]') as User[];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function write(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // 저장할 수 없으면 이번 실행 동안만 기억합니다.
-  }
-}
-
-/** 이 기기를 쓰는 작업자. 기기에 남겨 두어 앱을 다시 열어도 유지합니다. */
+/**
+ * 이 기기를 쓰는 작업자. 로그인 토큰을 기기에 남겨(localStorage) 앱을 다시 열거나
+ * 창고 음영 지역에서도 로그인이 유지됩니다. 사용자 목록도 기기에 남겨 오프라인에서 이름을 보여 줍니다.
+ */
 @Injectable({ providedIn: 'root' })
 export class OperatorSession {
   private readonly http = inject(HttpClient);
-  private readonly identity = inject(ApiIdentity);
+  private readonly auth = inject(AuthSession);
+  private readonly presence = inject(Presence);
 
-  readonly users = signal<User[]>(JSON.parse(read(USERS_KEY) ?? '[]') as User[]);
+  readonly users = signal<User[]>(readUsers());
   readonly operators = computed(() => this.users().filter((user) => user.role === 'operator'));
-  readonly operatorId = signal<string | null>(read(OPERATOR_KEY));
-  readonly operator = computed(
-    () => this.users().find((user) => user.id === this.operatorId()) ?? null,
-  );
+  readonly operator = computed(() => {
+    const user = this.auth.user();
+    return user?.role === 'operator' ? user : null;
+  });
+  readonly operatorId = computed(() => this.operator()?.id ?? null);
 
   constructor() {
-    effect(() => {
-      const id = this.operatorId();
-      if (id) this.identity.userId.set(id);
-      write(OPERATOR_KEY, id);
-    });
     this.http.get<Reference>('/api/reference').subscribe({
       next: (reference) => {
         this.users.set(reference.users);
-        write(USERS_KEY, JSON.stringify(reference.users));
+        try {
+          localStorage.setItem(USERS_KEY, JSON.stringify(reference.users));
+        } catch {
+          // 저장하지 못하면 다음 연결 때 다시 받습니다.
+        }
       },
       // 오프라인이면 기기에 남은 목록을 씁니다.
       error: () => undefined,
@@ -58,6 +52,7 @@ export class OperatorSession {
   }
 
   signOut(): void {
-    this.operatorId.set(null);
+    this.presence.leave();
+    this.auth.logout();
   }
 }

@@ -16,7 +16,7 @@ import { FieldErrors, Toaster } from '@/shared/ui';
 import { SkuApi } from '@/entities/sku';
 import { Session } from '@/entities/user';
 
-interface SkuModel {
+export interface SkuModel {
   name: string;
   safetyStock: number;
   unitCost: number;
@@ -57,7 +57,11 @@ function same(a: SkuModel, b: SkuModel): boolean {
 })
 export class EditSkuForm {
   readonly detail = input.required<SkuDetail>();
+  /** 변경 이력에서 불러온 값. 바뀔 때마다 폼에 채우고, 저장은 사용자가 확인한 뒤 버전 검사를 거쳐 합니다. */
+  readonly restore = input<{ values: Partial<SkuModel>; label: string } | null>(null);
   readonly saved = output<Sku>();
+  /** 버전 충돌로 저장이 막혔을 때. 서버가 막힌 시도를 변경 이력에 남깁니다. */
+  readonly conflicted = output<void>();
 
   private readonly api = inject(SkuApi);
   private readonly toaster = inject(Toaster);
@@ -104,6 +108,17 @@ export class EditSkuForm {
   });
 
   constructor() {
+    effect(() => {
+      const restore = this.restore();
+      if (!restore) return;
+      untracked(() => {
+        this.model.update((value) => ({ ...value, ...restore.values }));
+        this.toaster.show(
+          `${restore.label} 값을 폼에 불러왔습니다. 확인한 뒤 저장해 주세요.`,
+          'info',
+        );
+      });
+    });
     // 이 품목을 보고 있다는 것과, 저장하지 않은 입력이 있으면 수정 중이라는 것을 다른 탭에 알립니다.
     inject(Presence).track(
       () => `skus/${this.detail().sku.id}`,
@@ -171,6 +186,7 @@ export class EditSkuForm {
           if (isVersionConflict(apiError)) {
             this.conflict.set((apiError.current as SkuDetail).sku);
             this.incoming.set(null);
+            this.conflicted.emit();
           } else {
             this.serverError.set(apiError.message);
           }

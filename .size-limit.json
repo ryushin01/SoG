@@ -1,0 +1,21 @@
+[
+  {
+    "name": "백오피스 전체 JS",
+    "path": "apps/backoffice/dist/browser/*.js",
+    "gzip": true,
+    "limit": "255 kB"
+  },
+  {
+    "name": "백오피스 CSS",
+    "path": "apps/backoffice/dist/browser/*.css",
+    "gzip": true,
+    "limit": "3 kB"
+  },
+  {
+    "name": "현장 앱 전체 JS",
+    "path": "apps/count/dist/browser/*.js",
+    "gzip": true,
+    "limit": "230 kB"
+  },
+  { "name": "현장 앱 CSS", "path": "apps/count/dist/browser/*.css", "gzip": true, "limit": "2 kB" }
+]

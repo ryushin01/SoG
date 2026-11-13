@@ -158,7 +158,7 @@ function pad(n: number, size = 2): string {
   return String(n).padStart(size, '0');
 }
 
-export function buildLocations(): Location[] {
+function buildLocations(): Location[] {
   const layout: Record<ZoneCode, [aisles: number, racks: number, levels: number]> = {
     A: [3, 4, 2],
     B: [1, 4, 2],

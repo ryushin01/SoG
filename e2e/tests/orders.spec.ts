@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { expectAccessibleLayout, resetDemo } from './helpers';
+import { expectAccessibleLayout, loginBackoffice, loginCount, resetDemo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await resetDemo(page);
+  await loginBackoffice(page);
 });
 
 test('출고 지시를 만들고, 현장에서 피킹하고, 출고를 확정하면 재고가 준다', async ({
@@ -31,8 +32,7 @@ test('출고 지시를 만들고, 현장에서 피킹하고, 출고를 확정하
   // 2. 현장 앱: 이서준이 피킹
   const field = await context.newPage();
   await field.setViewportSize({ width: 390, height: 844 });
-  await field.goto('/count/');
-  await field.getByRole('button', { name: /이서준/ }).click();
+  await loginCount(field);
   await field.getByRole('link', { name: '피킹' }).click();
   await field.getByRole('link', { name: /시험유통/ }).click();
   await expect(field.getByRole('heading', { level: 1, name: '시험유통' })).toBeVisible();
@@ -62,8 +62,7 @@ test('두 관리자가 마지막 재고로 동시에 출고 지시를 만들면 
   context,
 }) => {
   const other = await context.newPage();
-  await other.goto('/orders');
-  await other.getByLabel('사용자').selectOption('u-park');
+  await loginBackoffice(other, '박도윤', '/orders');
   await page.goto('/orders');
 
   async function fill(tab: typeof page, customer: string) {

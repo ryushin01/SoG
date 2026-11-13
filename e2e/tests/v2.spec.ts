@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { expectAccessibleLayout, resetDemo } from './helpers';
+import { expectAccessibleLayout, loginBackoffice, loginCount, resetDemo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await resetDemo(page);
+  await loginBackoffice(page);
 });
 
 test('창고 도면에서 칸을 고르면 그 로케이션의 품목이 보이고 주소에 남는다', async ({ page }) => {
@@ -24,15 +25,14 @@ test('창고 도면에서 칸을 고르면 그 로케이션의 품목이 보이�
 
 test('다른 관리자가 같은 품목을 수정 중이면 미리 알려 준다', async ({ page, context }) => {
   const other = await context.newPage();
-  await other.goto('/inventory/sku-10201');
-  await other.getByLabel('사용자').selectOption('u-park');
+  await loginBackoffice(other, '박도윤', '/inventory/sku-10201');
   await page.goto('/inventory/sku-10201');
 
   const notice = page.getByRole('status').filter({ hasText: '지금 함께 보는 사람' });
   await expect(notice).toContainText('박도윤');
   await expect(notice).not.toContainText('수정 중');
 
-  await other.getByLabel('안전 재고').fill('44');
+  await other.getByLabel('안전 재고', { exact: true }).fill('44');
   await expect(notice).toContainText('수정 중');
 
   // 탭을 닫으면 떠났다고 알리고, 알림을 못 받아도 15초 뒤에는 사라집니다.
@@ -45,8 +45,7 @@ test('현장 작업자가 같은 품목을 보고 있으면 다른 작업자에�
   context,
 }) => {
   const first = page;
-  await first.goto('/count/');
-  await first.getByRole('button', { name: /이서준/ }).click();
+  await loginCount(first);
   await first.getByRole('link', { name: /A구역 2통로/ }).click();
   await first.locator('a.line').first().click();
   await expect(first).toHaveURL(/\/lines\//);
@@ -60,7 +59,7 @@ test('현장 작업자가 같은 품목을 보고 있으면 다른 작업자에�
 
   // 백오피스 실사 화면에서도 작업자가 어느 품목 앞에 있는지 보입니다.
   const backoffice = await context.newPage();
-  await backoffice.goto('/counts/ct-003');
+  await loginBackoffice(backoffice, '김하늘', '/counts/ct-003');
   await expect(
     backoffice.getByRole('status').filter({ hasText: '지금 함께 보는 사람' }),
   ).toContainText('현장 앱');

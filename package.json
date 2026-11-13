@@ -19,11 +19,15 @@
     "format:check": "prettier --check .",
     "prepare": "husky || true",
     "build:api": "node scripts/build-api.mjs",
-    "preview:api": "pnpm build && node scripts/build-api.mjs && pnpm site && node scripts/serve-site.mjs --api"
+    "preview:api": "pnpm build && node scripts/build-api.mjs && pnpm site && node scripts/serve-site.mjs --api",
+    "size": "size-limit",
+    "lhci": "lhci autorun"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@feature-sliced/steiger-plugin": "^0.8.2",
+    "@lhci/cli": "^0.16.0",
+    "@size-limit/file": "^14.3.0",
     "@types/node": "^26.6.6",
     "angular-eslint": "^22.6.0",
     "esbuild": "^0.28.2",
@@ -34,6 +38,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
+    "size-limit": "^14.3.0",
     "steiger": "^0.10.0",
     "turbo": "^2.11.10",
     "typescript": "~6.0.3",

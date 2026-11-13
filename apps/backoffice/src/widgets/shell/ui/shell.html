@@ -1,73 +1,77 @@
 <a class="skip" href="#main" (click)="skipToMain($event)">본문 바로가기</a>
 
-<div class="frame">
-  <header class="side">
-    <div class="side__top">
-      <a class="brand" routerLink="/">
-        <span class="brand__mark display">SoG</span>
-        <span class="brand__name"
-          >System of Goods<br /><span class="muted">평택 1센터 WMS</span></span
+<div class="frame" [class.frame--bare]="!auth.signedIn()">
+  @if (auth.signedIn()) {
+    <header class="side">
+      <div class="side__top">
+        <a class="brand" routerLink="/">
+          <span class="brand__mark display">SoG</span>
+          <span class="brand__name"
+            >System of Goods<br /><span class="muted">평택 1센터 WMS</span></span
+          >
+        </a>
+        <button
+          type="button"
+          class="btn btn--small menu-toggle"
+          [attr.aria-expanded]="menuOpen()"
+          aria-controls="primary-nav"
+          (click)="menuOpen.set(!menuOpen())"
         >
-      </a>
-      <button
-        type="button"
-        class="btn btn--small menu-toggle"
-        [attr.aria-expanded]="menuOpen()"
-        aria-controls="primary-nav"
-        (click)="menuOpen.set(!menuOpen())"
-      >
-        메뉴
-      </button>
-    </div>
+          메뉴
+        </button>
+      </div>
 
-    <nav id="primary-nav" class="nav" [class.nav--open]="menuOpen()" aria-label="주 메뉴">
-      <ul>
-        @for (item of nav; track item.path) {
-          <li>
-            <a
-              class="nav__link"
-              [routerLink]="item.path"
-              routerLinkActive="nav__link--active"
-              [routerLinkActiveOptions]="{ exact: item.exact }"
-              ariaCurrentWhenActive="page"
-            >
-              <span class="nav__index" aria-hidden="true">{{ item.index }}</span>
-              <span>{{ item.label }}</span>
-            </a>
-          </li>
+      <nav id="primary-nav" class="nav" [class.nav--open]="menuOpen()" aria-label="주 메뉴">
+        <ul>
+          @for (item of nav; track item.path) {
+            <li>
+              <a
+                class="nav__link"
+                [routerLink]="item.path"
+                routerLinkActive="nav__link--active"
+                [routerLinkActiveOptions]="{ exact: item.exact }"
+                ariaCurrentWhenActive="page"
+              >
+                <span class="nav__index" aria-hidden="true">{{ item.index }}</span>
+                <span>{{ item.label }}</span>
+              </a>
+            </li>
+          }
+        </ul>
+        <a
+          class="nav__field"
+          href="/count/"
+          target="_blank"
+          rel="noopener"
+          aria-label="현장 실사 앱 열기 (새 창)"
+        >
+          현장 실사 앱 열기
+          <span aria-hidden="true">↗</span>
+        </a>
+      </nav>
+
+      <p class="side__note">
+        @if (host.mode() === 'remote') {
+          데이터는 서버(Postgres)에 저장되어 모든 기기가 함께 봅니다. 휴대폰으로 현장 실사 앱을 열면
+          여기에 바로 반영됩니다.
+        } @else {
+          데이터는 이 브라우저 안의 데모 서버에 저장됩니다. 탭을 두 개 열어 서로 다른 사용자로 같은
+          품목을 수정해 보세요.
         }
-      </ul>
-      <a
-        class="nav__field"
-        href="/count/"
-        target="_blank"
-        rel="noopener"
-        aria-label="현장 실사 앱 열기 (새 창)"
-      >
-        현장 실사 앱 열기
-        <span aria-hidden="true">↗</span>
-      </a>
-    </nav>
-
-    <p class="side__note">
-      @if (host.mode() === 'remote') {
-        데이터는 서버(Postgres)에 저장되어 모든 기기가 함께 봅니다. 휴대폰으로 현장 실사 앱을 열면
-        여기에 바로 반영됩니다.
-      } @else {
-        데이터는 이 브라우저 안의 데모 서버에 저장됩니다. 탭을 두 개 열어 서로 다른 사용자로 같은
-        품목을 수정해 보세요.
-      }
-    </p>
-  </header>
+      </p>
+    </header>
+  }
 
   <div class="body">
-    <div class="bar">
-      <sog-remote-change-notifier />
-      <div class="cluster">
-        <sog-reset-demo-button />
-        <sog-user-switcher />
+    @if (auth.signedIn()) {
+      <div class="bar">
+        <sog-remote-change-notifier />
+        <div class="cluster">
+          <sog-reset-demo-button />
+          <sog-user-menu />
+        </div>
       </div>
-    </div>
+    }
     <main id="main" class="main" tabindex="-1">
       <ng-content />
     </main>
