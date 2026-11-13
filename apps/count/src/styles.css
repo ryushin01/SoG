@@ -1,8 +1,13 @@
 /*
  * SoG 현장 실사 앱 디자인 토큰.
  * 미색 바탕, 검은 글자, 고정폭 대문자 캡션, 하늘색으로 채워지는 윤곽선 버튼.
- * 장갑을 낀 손으로도 누르기 쉽게 조작 요소는 최소 48px입니다. 웹 글꼴 없이 운영체제 글꼴만 씁니다.
+ * 장갑을 낀 손으로도 누르기 쉽게 조작 요소는 최소 48px입니다. 본문은 오프라인 실사를 위해 운영체제 글꼴을 쓰고, 코드·수량만 작은 IBM Plex Mono를 미리 받아 둡니다.
  */
+
+/* 품목 코드·로케이션·수량은 0과 O, 1과 l이 또렷한 IBM Plex Mono(라틴 글자만, 작은 파일). 한글은 운영체제 글꼴로 이어집니다. */
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+
 :root {
   color-scheme: light;
 
@@ -26,7 +31,9 @@
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic',
     'Noto Sans CJK KR', 'Noto Sans KR', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'D2Coding', monospace;
+  --font-mono:
+    'IBM Plex Mono', ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'D2Coding',
+    monospace;
   --radius: 3px;
   --gutter: 1rem;
   --bar: 3.5rem;

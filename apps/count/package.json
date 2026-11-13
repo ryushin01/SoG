@@ -1,6 +1,6 @@
 {
   "name": "@sog/count",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "scripts": {
     "dev": "ng serve --port 4201 --serve-path /count/",
     "build": "ng build --define \"SENTRY_DSN='${SENTRY_DSN:-}'\"",
@@ -20,6 +20,7 @@
     "@angular/platform-browser": "^22.2.0",
     "@angular/router": "^22.2.0",
     "@angular/service-worker": "^22.2.5",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "@sog/domain": "workspace:*",
     "@sog/monitoring": "workspace:*",
     "@sog/wms-client": "workspace:*",
