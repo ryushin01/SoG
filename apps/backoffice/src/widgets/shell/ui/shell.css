@@ -178,3 +178,8 @@
     display: none;
   }
 }
+
+.frame--bare {
+  grid-template-columns: 1fr;
+  background: none;
+}

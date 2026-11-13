@@ -10,12 +10,13 @@ export const STORES = [
   'counts',
   'countLines',
   'orders',
+  'history',
   'activity',
   'idempotency',
 ] as const;
 
 /** 저장소를 추가하면 올립니다. 올라가면 없는 저장소를 만들고, 서버가 시드 버전을 보고 다시 채웁니다. */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export type StoreName = (typeof STORES)[number];
 
