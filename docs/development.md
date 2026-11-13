@@ -88,7 +88,7 @@ axe 통과만으로 끝내지 않고 아래 항목을 직접 점검했습니다.
 ## 품질 예산
 
 - **번들 크기:** `pnpm size`가 백오피스 JS 255 kB·CSS 3 kB, 현장 앱 JS 230 kB·CSS 2 kB(gzip, 화면별 조각 포함)를 넘으면 실패합니다. 기준은 `.size-limit.json`에 있습니다.
-- **Lighthouse:** `pnpm site` 뒤에 `pnpm lhci`가 배포와 같은 구조(`scripts/serve-site.mjs`, 데모 모드)로 대시보드·출고 지시·재고 상세·현장 앱을 데스크톱 기준 3번씩 재서 성능 90·접근성 100·권장 사항 95·SEO 90점, LCP 2.5초·TBT 200ms·CLS 0.1 이하인지 확인합니다. 데모 모드는 시작할 때 `/api/health`가 404인 것을 보고 정하므로, 콘솔의 404 한 건은 의도한 것입니다.
+- **Lighthouse:** `pnpm site` 뒤에 `pnpm lhci`가 배포와 같은 구조(`scripts/serve-site.mjs`, 데모 모드)로 두 앱의 첫 화면(백오피스 로그인, 현장 앱 로그인)을 데스크톱 기준 3번씩 재서 성능 90·접근성 100·권장 사항 95·SEO 90점, LCP 2.5초·TBT 200ms·CLS 0.1 이하인지 확인합니다. 데모 모드는 시작할 때 `/api/health`가 404인 것을 보고 정하므로, 콘솔의 404 한 건은 의도한 것입니다. 로그인 뒤 화면은 재지 않습니다. 백오피스 토큰은 탭마다 따로인 `sessionStorage`에 있어 Lighthouse가 여는 새 탭에 넘길 수 없기 때문입니다. 로그인 뒤 화면의 접근성(axe)과 가로 넘침은 E2E가 검사합니다.
 - **템플릿 접근성:** `angular-eslint`의 `templateAccessibility` 규칙을 이미 씁니다.
 
 ## 모니터링

@@ -2,12 +2,7 @@
   "ci": {
     "collect": {
       "startServerCommand": "node scripts/serve-site.mjs",
-      "url": [
-        "http://localhost:4300/",
-        "http://localhost:4300/orders",
-        "http://localhost:4300/inventory/sku-10201",
-        "http://localhost:4300/count/"
-      ],
+      "url": ["http://localhost:4300/login", "http://localhost:4300/count/start"],
       "numberOfRuns": 3,
       "settings": {
         "preset": "desktop"
