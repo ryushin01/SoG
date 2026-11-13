@@ -10,14 +10,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const site = join(root, 'site');
 execFileSync(process.execPath, [join(root, 'scripts/assemble-site.mjs')], { stdio: 'inherit' });
 
-const redirects = [
-  '/count /count/ 308',
-  // 폴더 주소로 열면 상대 경로 파일을 못 찾으므로 index.html로 보냅니다.
-  '/storybook/backoffice /storybook/backoffice/index.html 307',
-  '/storybook/backoffice/ /storybook/backoffice/index.html 307',
-  '/storybook/count /storybook/count/index.html 307',
-  '/storybook/count/ /storybook/count/index.html 307',
-];
+// Storybook 폴더는 넘김 규칙을 두지 않습니다. 정적 자산의 기본 html_handling(auto-trailing-slash)이
+// `/storybook/backoffice`와 `…/index.html`을 `/storybook/backoffice/`로 넘기고 그 주소에서 index.html을
+// 내보내므로 상대 경로 파일도 찾습니다. 여기서 index.html로 다시 넘기면 서로 되돌려 보내 넘김이 끝나지 않습니다.
+const redirects = ['/count /count/ 308'];
 writeFileSync(join(site, '_redirects'), `${redirects.join('\n')}\n`);
 
 const immutable = ['chunk', 'main', 'polyfills', 'styles'].flatMap((name) => [

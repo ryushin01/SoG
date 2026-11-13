@@ -2,7 +2,7 @@
 
 ## 0.4.1 - 2026-11-13
 
-- 운영 이전: Vercel에서 Cloudflare Workers로 옮김(새 주소 https://sog.ryushin01.workers.dev). 두 앱의 정적 파일은 Cloudflare가 바로 내보내고 `/api`만 Worker가 받음. DB는 그대로 Neon(싱가포르)이고 Hyperdrive로 연결(쿼리 결과 캐시 끔)
+- 운영 이전: Vercel에서 Cloudflare Workers로 옮김(새 주소 https://sog.ryushin01.workers.dev). 옛 주소(`sog-ryushin01.vercel.app`)는 새 주소로 넘어감(308). 두 앱의 정적 파일은 Cloudflare가 바로 내보내고 `/api`만 Worker가 받음. DB는 그대로 Neon(싱가포르)이고 Hyperdrive로 연결(쿼리 결과 캐시 끔)
 - Worker는 API 처리기·업무 서버를 실행 환경마다 한 번만 만들고 DB 연결만 요청마다 열어, 마이그레이션·시드 확인을 요청마다 하지 않음. 응답 뒤에 남은 쿼리는 끝난 다음에 연결을 닫음(+테스트 8)
 - 매일 03:00(KST) 데모 초기화는 Cloudflare Cron Trigger로. 실사 앱 화면 주소(`/count/tasks/…` 등)로 바로 들어와도 실사 앱이 열리게 Worker가 답함
 - 배포: `main`에 머지하면 GitHub Actions가 `wrangler deploy`로 배포하고, 문서·테스트만 바뀐 푸시는 건너뜀. Vercel 설정(`vercel.json`, Build Output API 스크립트, 함수 진입점, 건너뛰기 스크립트)은 걷어 냄

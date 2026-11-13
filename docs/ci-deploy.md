@@ -29,15 +29,15 @@ Worker 하나(`sog`)에 두 앱의 정적 파일과 `/api`를 함께 올립니�
 |---|---|
 | https://sog.ryushin01.workers.dev/ | 백오피스 |
 | https://sog.ryushin01.workers.dev/count/ | 현장 실사 앱(PWA) |
-| https://sog.ryushin01.workers.dev/storybook/backoffice | 백오피스 Storybook |
-| https://sog.ryushin01.workers.dev/storybook/count | 실사 앱 Storybook |
+| https://sog.ryushin01.workers.dev/storybook/backoffice/ | 백오피스 Storybook |
+| https://sog.ryushin01.workers.dev/storybook/count/ | 실사 앱 Storybook |
 
 - 배포: `main`에 머지하면 CI의 `deploy` 작업이 두 앱과 Storybook을 빌드하고, `scripts/build-cloudflare.mjs`로 `site/`를 만든 뒤 `wrangler deploy`로 올립니다. Actions에서 CI를 직접 실행해도(workflow_dispatch) 다시 배포합니다. 저장소 Secret `CLOUDFLARE_API_TOKEN`(Workers 편집 권한, Hyperdrive 편집 권한)과 `CLOUDFLARE_ACCOUNT_ID`가 필요하고, 토큰이 없으면 경고만 남기고 배포를 건너뜁니다(그때는 `npx wrangler deploy`로 직접 배포).
 - 배포 건너뛰기: 직전 푸시와 비교해 문서·E2E·테스트·스토리·CI 설정만 바뀌었으면 배포하지 않습니다.
 - 라우팅: Worker는 `/api/*`와 실사 앱의 화면 주소(`/count/` 아래 점 없는 주소)만 받고, 나머지 파일은 Cloudflare가 바로 내보냅니다(`assets.run_worker_first`). 실사 앱 화면 주소는 실사 앱의 `index.html`로, 그 밖의 없는 주소는 백오피스의 `index.html`로 답합니다.
-- Storybook: 폴더 주소로 열면 상대 경로 파일을 못 찾으므로 `index.html`로 redirect합니다(`site/_redirects`).
+- Storybook: `/`로 끝나는 폴더 주소(`/storybook/backoffice/`)에서 `index.html`을 내보냅니다. 끝에 `/`가 없거나 `index.html`이 붙은 주소는 Cloudflare 정적 자산의 기본 동작(`html_handling: auto-trailing-slash`)이 폴더 주소로 넘겨(307) 상대 경로 파일을 찾게 합니다. `site/_redirects`에서 다시 `index.html`로 넘기면 둘이 서로 되돌려 보내 넘김이 끝나지 않으므로, Storybook에는 넘김 규칙을 두지 않습니다.
 - 캐시: 서비스 워커 파일(`ngsw-worker.js`, `ngsw.json`)은 `no-cache`, 해시가 붙은 JS·CSS는 1년입니다(`site/_headers`).
-- DB: Neon(무료, 싱가포르)에 Hyperdrive 설정 `sog-db`로 연결합니다. Hyperdrive가 연결을 DB 가까이에 모아 두어 요청마다 새로 연결해도 빠릅니다. 쿼리 결과 캐시는 꺼서 변경 피드·접속 표시가 늦게 보이지 않게 했습니다. Neon 프로젝트는 처음에 Vercel Marketplace 연동으로 만들어 Vercel 프로젝트 `sog`에 묶여 있으므로, 그 Vercel 프로젝트는 지우지 않습니다(배포만 끊었습니다).
+- DB: Neon(무료, 싱가포르)에 Hyperdrive 설정 `sog-db`로 연결합니다. Hyperdrive가 연결을 DB 가까이에 모아 두어 요청마다 새로 연결해도 빠릅니다. 쿼리 결과 캐시는 꺼서 변경 피드·접속 표시가 늦게 보이지 않게 했습니다. Neon 프로젝트는 처음에 Vercel Marketplace 연동으로 만들어 Vercel 프로젝트 `sog`에 묶여 있으므로, 그 Vercel 프로젝트는 지우지 않습니다. GitHub 연결은 끊었고, 옛 주소 `sog-ryushin01.vercel.app`은 모든 경로를 새 주소로 넘기는(308) 배포만 남겼습니다(`vercel.json`의 `redirects`만 담아 Vercel CLI로 올림).
 - 비밀 값: `AUTH_SECRET`(로그인 토큰 서명)과 `CRON_SECRET`(매일 초기화)은 Worker Secret입니다(`npx wrangler secret put AUTH_SECRET`).
 - 예약 작업: 매일 03:00(KST) Cron Trigger가 데모 데이터를 처음 상태로 되돌립니다(`triggers.crons`).
 - 무료 요금제 한도: Worker 요청 하루 10만 건, Hyperdrive 쿼리 하루 10만 건입니다. 정적 파일은 한도를 쓰지 않습니다. 화면을 열어 둔 탭은 변경 피드(2.5초)와 접속 표시(3초)를 폴링하므로, 여러 탭을 하루 종일 열어 두면 한도에 다가갑니다.
