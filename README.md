@@ -7,7 +7,7 @@
 
 물류창고의 재고를 관리하는 백오피스와, 창고 현장에서 재고 실사·피킹을 하는 작업자용 PWA를 한 저장소에 담은 모노레포입니다. 두 사람이 같은 재고를 동시에 고쳐도, 실사 도중 물건이 들고 나도, 마지막 재고를 두 출고 지시가 동시에 잡으려 해도, 음영 지역에서 연결이 끊겨도 재고가 어긋나지 않도록 동시성 제어에 집중했습니다.
 
-**[백오피스 보기](https://sog.ryushin01.workers.dev/)** · **[현장 실사 앱 보기](https://sog.ryushin01.workers.dev/count/)** · **[Storybook](https://sog.ryushin01.workers.dev/storybook/backoffice)** · 데모 계정의 비밀번호는 모두 `sog-demo`입니다. 데이터는 서버(Postgres)에 있어서, 휴대폰으로 실사 앱을 열고 PC로 백오피스를 열면 센 수량과 피킹이 바로 나타납니다.
+**[백오피스 보기](https://sog.ryushin01.workers.dev/)** · **[현장 실사 앱 보기](https://sog.ryushin01.workers.dev/count/)** · **[Storybook](https://sog.ryushin01.workers.dev/storybook/backoffice/)** · 데모 계정의 비밀번호는 모두 `sog-demo`입니다. 데이터는 서버(Postgres)에 있어서, 휴대폰으로 실사 앱을 열고 PC로 백오피스를 열면 센 수량과 피킹이 바로 나타납니다.
 
 > **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 운영 사이트는 Cloudflare Workers와 Neon(Postgres) 위의 실제 서버로, 개발 서버와 `pnpm preview`는 같은 코드를 브라우저 안(IndexedDB)에서 돌리는 데모 서버로 동작합니다. 품목·작업자·재고는 모두 가상 데이터이고, 매일 03:00(KST)에 처음 상태로 돌아갑니다.
 
