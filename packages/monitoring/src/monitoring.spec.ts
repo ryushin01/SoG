@@ -61,6 +61,34 @@ describe('monitoring', () => {
     }
   });
 
+  it('load가 10초 안에 오면 기한을 거두고 한가할 때를 기다린다', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
+    // 한가할 때 부를 함수를 모아 두었다가 직접 부릅니다.
+    const idleCallbacks: Array<() => void> = [];
+    const idleWindow = window as unknown as {
+      requestIdleCallback?: (callback: () => void) => number;
+    };
+    const original = idleWindow.requestIdleCallback;
+    idleWindow.requestIdleCallback = vi.fn((callback: () => void) => idleCallbacks.push(callback));
+    const { initMonitoring } = await import('./monitoring');
+    sentry.init.mockClear();
+    try {
+      initMonitoring({ dsn: 'https://key@o1.ingest.sentry.io/1', app: 'test', dev: false });
+      await vi.advanceTimersByTimeAsync(9_000);
+      window.dispatchEvent(new Event('load'));
+      // 10초가 지나도 한가할 때가 오기 전에는 받지 않습니다.
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(sentry.init).not.toHaveBeenCalled();
+      for (const callback of idleCallbacks) callback();
+      await vi.waitFor(() => expect(sentry.init).toHaveBeenCalledTimes(1));
+    } finally {
+      if (original) idleWindow.requestIdleCallback = original;
+      else delete idleWindow.requestIdleCallback;
+      vi.useRealTimers();
+    }
+  });
+
   it('DSN이 없으면 나쁜 지표와 오류를 오류 없이 넘긴다', async () => {
     const { initMonitoring, reportError, reportMetric } = await import('./monitoring');
     initMonitoring({ app: 'test', dev: false });
