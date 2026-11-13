@@ -16,12 +16,29 @@
 
 앱은 시작할 때 `/api/health`를 한 번 부릅니다(`WmsHost.ready()`).
 
-- `{"mode":"remote"}`이면 요청을 서버로 보냅니다. 인터셉터가 `x-sog-user`(사용자)와 `x-sog-origin`(탭)을 붙입니다.
+- `{"mode":"remote"}`이면 요청을 서버로 보냅니다. 인터셉터가 `Authorization: Bearer <토큰>`과 `x-sog-origin`(탭)을 붙입니다.
 - 404·503이면 브라우저 안 데모 서버를 씁니다. 미리보기 배포에는 DB를 연결하지 않아 503이 나오므로, 미리보기는 운영 데이터를 건드리지 않습니다.
-- 응답이 없으면(오프라인) 마지막으로 확인한 모드를 씁니다. 창고 음영 지역에서 연 현장 앱이 데모 데이터로 바뀌어 가짜 수량을 실제처럼 보여 주는 일을 막기 위해서입니다.
+- 그 밖의 오류(500 등)나 응답이 없으면(오프라인) 마지막으로 확인한 모드를 쓰고 덮어쓰지 않습니다. 창고 음영 지역에서 연 현장 앱이 데모 데이터로 바뀌어 가짜 수량을 실제처럼 보여 주는 일을 막기 위해서입니다.
 - 운영 함수는 DB에 묻지 않고 상태 확인에 답합니다. DB가 잠시 응답하지 않아도 데모 모드로 바뀌지 않고, 장애는 각 요청의 오류로 드러납니다.
 
 화면 코드는 어느 모드인지 모릅니다. 모두 `HttpClient`로 같은 API를 부르고, 같은 상태 코드(200·201·409·412·428)를 받습니다.
+
+## 로그인과 권한
+
+| | 내용 |
+|---|---|
+| 로그인 | `POST /api/auth/login` `{ userId, password }` → `{ token, expiresAt, user }`. 데모 계정의 비밀번호는 모두 `sog-demo` |
+| 토큰 | `사용자ID.만료(초).서명`, HMAC-SHA256(Web Crypto). 7일 유효. 브라우저와 서버가 같은 코드로 서명·검증 |
+| 서명 키 | 운영은 `AUTH_SECRET`(32자 이상, 없으면 500). 데모 모드는 브라우저 안이라 비밀일 수 없어 고정 값 |
+| 보관 | 백오피스는 `sessionStorage`(탭마다 다른 관리자로 로그인해 동시 수정 시연), 현장 앱은 `localStorage`(앱을 닫거나 오프라인이어도 유지). 쿠키는 모든 탭이 함께 써서 탭별 계정이 안 되므로 헤더로 보냄 |
+| 401 | 토큰이 없거나 만료·위조. 화면은 로그인 화면으로 보내고, 현장 앱 보낼함은 기록을 남겨 다시 로그인하면 보냄 |
+| 403 | 역할이 맞지 않음. 품목 수정·재고 조정·입출고·실사 만들기/승인/취소·출고 지시·초기화는 관리자만, 실사 항목·피킹은 배정된 작업자만 |
+
+로그인 화면과 `GET /api/reference`(계정 목록)만 토큰 없이 부를 수 있습니다. 변경 피드와 접속 표시도 토큰이 필요하고, 접속 표시의 사용자는 요청 값이 아니라 토큰에서 가져옵니다.
+
+## 변경 이력
+
+`mutate()`가 쓰기 직전에 품목·재고·실사 항목의 추적 필드를 이전 값과 비교해 `history` 저장소에 남깁니다(누가, 언제, 어느 버전, 무엇이 무엇으로). 버전 충돌(412)로 막힌 시도도 막힌 값과 함께 남깁니다. `GET /api/skus/:id/history`는 최근 60건을 돌려주고, 품목 상세의 변경 이력에서 그때 값을 수정 폼에 다시 불러올 수 있습니다.
 
 ## 저장 구조
 
@@ -33,7 +50,7 @@ presence (tab_id text primary key, data jsonb, seen_at timestamptz)    -- 접속
 
 업무 문서는 저장소(`skus`, `stocks`, `orders` …)별 jsonb로 둡니다. 브라우저 데모 서버와 같은 문서 모델을 그대로 써서, 업무 규칙을 두 벌로 만들지 않기 위한 선택입니다. 데이터가 수백 건 규모라 요청마다 저장소를 통째로 읽어도 충분히 빠릅니다. 데이터가 커지면 문서 모델을 정규화된 테이블로 옮기고 `Storage` 인터페이스만 다시 구현하면 됩니다.
 
-스키마는 첫 요청에서 `create table if not exists`로 만들고, 시드는 `meta` 문서의 시드 버전을 보고 넣습니다.
+스키마는 첫 요청에서 `create table if not exists`로 만들고, 시드는 `meta` 문서가 없을 때만 넣습니다. 데모 모드는 시드 버전이 바뀌면 다시 채우지만, 실제 서버는 배포 중 옛 함수와 새 함수가 함께 돌며 서로를 낡았다고 보고 데이터를 거듭 지울 수 있어 버전으로 다시 채우지 않습니다(`reseedOnVersionChange`).
 
 ## 쓰기와 잠금
 
@@ -59,7 +76,8 @@ COMMIT                                      -- 잠금 해제
 
 - `scripts/build-api.mjs`: esbuild로 `/api` 코드를 파일 하나로 묶습니다(`vercel.mjs`: node-postgres, `local.mjs`: PGlite).
 - `scripts/build-vercel.mjs`: [Build Output API](https://vercel.com/docs/build-output-api/v3) 형식으로 `.vercel/output`을 만듭니다. 정적 사이트, `api.func`(Node 22, `sin1`), 라우팅·캐시 규칙(`config.json`)이 들어갑니다.
-- DB는 Vercel Marketplace의 Neon 연동으로 만들었고, **운영 환경에만** `DATABASE_URL`을 넣었습니다.
+- DB는 Vercel Marketplace의 Neon 연동으로 만들었고, **운영 환경에만** `DATABASE_URL`을 넣었습니다. `AUTH_SECRET`·`CRON_SECRET`도 운영 환경에만 Secret으로 둡니다.
+- 매일 03:00(KST) Vercel Cron이 `/api/cron/reset`을 `Authorization: Bearer <CRON_SECRET>`으로 불러 데모 데이터를 처음 상태로 되돌립니다(`config.json`의 `crons`).
 
 ## 로컬에서 실제 서버 모드로
 
@@ -71,5 +89,6 @@ pnpm preview:api   # http://localhost:4300, /api를 PGlite(메모리 Postgres) �
 
 ## 알려 둘 점
 
-- 데모용이라 인증이 없습니다. 사용자는 `x-sog-user` 헤더로 고르고, 누구나 데모 초기화(`POST /api/_reset`)를 할 수 있습니다.
+- 데모라 비밀번호를 공개합니다. 실제 서비스라면 계정별 비밀번호 해시(예: Argon2)와 로그인 시도 제한, 짧은 토큰과 갱신, 토큰 폐기 목록이 필요합니다.
+- 데모 초기화(`POST /api/_reset`)는 관리자만 할 수 있습니다.
 - 요청 본문은 64KB까지 받고, 모든 입력은 업무 서버가 검증합니다(길이, 정수 범위, 상태 전이, 역할).

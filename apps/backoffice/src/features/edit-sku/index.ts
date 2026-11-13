@@ -1,1 +1,1 @@
-export { EditSkuForm } from './ui/edit-sku-form';
+export { EditSkuForm, type SkuModel } from './ui/edit-sku-form';

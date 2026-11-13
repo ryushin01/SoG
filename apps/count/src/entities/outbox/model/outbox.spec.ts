@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { CountTaskDetail } from '@sog/domain';
-import { createWmsServer, type WmsServer } from '@sog/wms-server';
-import { NetworkState, provideWmsClient } from '@/shared/api';
+import { createWmsServer, issueToken, LOCAL_AUTH_SECRET, type WmsServer } from '@sog/wms-server';
+import { NetworkState, provideWmsClient, seedTestSession } from '@/shared/api';
 import { LOCAL_DB_NAME } from '@/shared/lib';
 import { Outbox } from './outbox';
 
@@ -13,12 +13,22 @@ async function until(check: () => boolean, timeout = 3000): Promise<void> {
   }
 }
 
+/** 서버를 직접 부를 때 붙이는 로그인 헤더 */
+async function auth(userId: string): Promise<Record<string, string>> {
+  const { token } = await issueToken(LOCAL_AUTH_SECRET, userId, Math.floor(Date.now() / 1000));
+  return { Authorization: `Bearer ${token}` };
+}
+
 describe('Outbox', () => {
   let admin: WmsServer;
   let outbox: Outbox;
   let network: NetworkState;
 
   beforeEach(async () => {
+    await seedTestSession(
+      { id: 'u-lee', name: '이서준', role: 'operator', team: '실사 1조' },
+      'session',
+    );
     const dbName = `count-${crypto.randomUUID()}`;
     admin = await createWmsServer({ dbName });
     TestBed.configureTestingModule({
@@ -35,8 +45,9 @@ describe('Outbox', () => {
   afterEach(() => admin.close());
 
   async function firstLine(status: 'pending' | 'counted') {
-    const detail = (await admin.handle({ method: 'GET', url: '/api/counts/ct-003', headers: {} }))
-      .body as CountTaskDetail;
+    const detail = (
+      await admin.handle({ method: 'GET', url: '/api/counts/ct-003', headers: await auth('u-kim') })
+    ).body as CountTaskDetail;
     return detail.lines.find((line) => line.status === status)!;
   }
 
@@ -63,8 +74,9 @@ describe('Outbox', () => {
     TestBed.tick();
     await until(() => outbox.items().length === 0);
 
-    const after = (await admin.handle({ method: 'GET', url: '/api/counts/ct-003', headers: {} }))
-      .body as CountTaskDetail;
+    const after = (
+      await admin.handle({ method: 'GET', url: '/api/counts/ct-003', headers: await auth('u-kim') })
+    ).body as CountTaskDetail;
     expect(after.lines.find((l) => l.id === line.id)!.countedQty).toBe(7);
   });
 
@@ -77,6 +89,18 @@ describe('Outbox', () => {
     expect(outbox.items()[0]!.countedQty).toBe(4);
   });
 
+  it('다시 센 기록을 기기에 쓰지 못하면 이전 기록을 그대로 남긴다', async () => {
+    network.simulatedOffline.set(true);
+    const line = await firstLine('pending');
+    const first = await outbox.enqueue(item(line, 3));
+    const store = (outbox as unknown as { store: { replace: () => Promise<void> } }).store;
+    const spy = vi.spyOn(store, 'replace').mockRejectedValueOnce(new Error('QuotaExceededError'));
+
+    await expect(outbox.enqueue(item(line, 9))).rejects.toThrow();
+    expect(outbox.items().map((i) => [i.id, i.countedQty])).toEqual([[first.id, 3]]);
+    spy.mockRestore();
+  });
+
   it('보내기 전에 관리자가 재실사를 요청했으면 덮어쓰지 않고 충돌로 남긴다', async () => {
     network.simulatedOffline.set(true);
     const line = await firstLine('counted');
@@ -85,7 +109,7 @@ describe('Outbox', () => {
     await admin.handle({
       method: 'POST',
       url: `/api/counts/ct-003/lines/${line.id}/recount`,
-      headers: { 'If-Match': `"${line.version}"` },
+      headers: { ...(await auth('u-kim')), 'If-Match': `"${line.version}"` },
     });
 
     network.simulatedOffline.set(false);

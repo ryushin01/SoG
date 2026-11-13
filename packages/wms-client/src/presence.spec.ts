@@ -1,8 +1,9 @@
 import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { provideHttpClient } from '@angular/common/http';
+import { AuthSession, seedTestSession } from './auth';
 import { WmsHost } from './host';
-import { ApiIdentity } from './interceptor';
 import { Presence } from './presence';
 
 @Component({ selector: 'test-viewer', template: '' })
@@ -22,6 +23,7 @@ const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 describe('Presence', () => {
   const channels: BroadcastChannel[] = [];
   afterEach(() => {
+    sessionStorage.clear();
     channels.splice(0).forEach((c) => c.close());
     TestBed.resetTestingModule();
   });
@@ -37,7 +39,9 @@ describe('Presence', () => {
 
   it('보는 자원과 수정 중 여부를 다른 탭에 알린다', async () => {
     const other = otherTab();
-    TestBed.inject(ApiIdentity).userId.set('u-park');
+    await seedTestSession({ id: 'u-park', name: '박도윤', role: 'manager', team: '센터장' });
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    expect(TestBed.inject(AuthSession).user()?.id).toBe('u-park');
     const fixture = TestBed.createComponent(Viewer);
     TestBed.tick();
     await wait();
@@ -105,12 +109,17 @@ describe('Presence', () => {
     await wait();
     expect(peers().map((p) => [p.tabId, p.editing])).toEqual([['t3', false]]);
   });
-  /** 서버 모드인지 늦게 알려 주는 호스트 */
-  function slowHost() {
+
+  /** 서버 모드인지 늦게 알려 주는 호스트. 서버 모드의 접속 표시는 로그인 토큰이 있어야 보냅니다. */
+  async function slowHost() {
+    await seedTestSession({ id: 'u-kim', name: '김하늘', role: 'manager', team: '재고관리팀' });
     let resolve!: (mode: 'remote' | 'local') => void;
     const ready = new Promise<'remote' | 'local'>((r) => (resolve = r));
     TestBed.configureTestingModule({
-      providers: [{ provide: WmsHost, useValue: { ready: () => ready, mode: signal(null) } }],
+      providers: [
+        provideHttpClient(),
+        { provide: WmsHost, useValue: { ready: () => ready, mode: signal(null) } },
+      ],
     });
     return (mode: 'remote' | 'local') => resolve(mode);
   }
@@ -118,18 +127,24 @@ describe('Presence', () => {
   it('서버 모드면 다른 기기의 접속 정보를 받아 온다', async () => {
     const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
     vi.stubGlobal('fetch', fetchSpy);
-    const answer = slowHost();
+    const answer = await slowHost();
     TestBed.inject(Presence);
     answer('remote');
     await wait();
-    expect(fetchSpy).toHaveBeenCalledWith('/api/presence', { cache: 'no-store' });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/presence',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: { Authorization: expect.stringMatching(/^Bearer /) },
+      }),
+    );
     vi.unstubAllGlobals();
   });
 
   it('서버 모드인지 알기 전에 정리되면 폴링을 시작하지 않는다', async () => {
     const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
     vi.stubGlobal('fetch', fetchSpy);
-    const answer = slowHost();
+    const answer = await slowHost();
     TestBed.inject(Presence);
     // 루트 주입기를 정리하면 Presence의 정리 함수가 불린다.
     TestBed.resetTestingModule();

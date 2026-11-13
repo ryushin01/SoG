@@ -1,15 +1,25 @@
 import type { SkuDetail } from '@sog/domain';
-import { createWmsServer, type WmsServer } from '@sog/wms-server';
+import { createWmsServer, issueToken, LOCAL_AUTH_SECRET, type WmsServer } from '@sog/wms-server';
 import { render, screen } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
-import { provideWmsClient } from '@/shared/api';
+import { provideWmsClient, seedTestSession } from '@/shared/api';
 import { MovementForm } from './movement-form';
+
+/** 서버를 직접 부를 때 붙이는 로그인 헤더 */
+async function auth(userId: string): Promise<Record<string, string>> {
+  const { token } = await issueToken(LOCAL_AUTH_SECRET, userId, Math.floor(Date.now() / 1000));
+  return { Authorization: `Bearer ${token}` };
+}
 
 describe('MovementForm', () => {
   let server: WmsServer;
   const done = vi.fn();
 
   beforeEach(async () => {
+    await seedTestSession(
+      { id: 'u-kim', name: '김하늘', role: 'manager', team: '재고관리팀' },
+      'session',
+    );
     const dbName = `mv-${crypto.randomUUID()}`;
     server = await createWmsServer({ dbName });
     done.mockReset();
@@ -23,8 +33,13 @@ describe('MovementForm', () => {
   afterEach(() => server.close());
 
   async function onHandAt(code: string): Promise<number> {
-    const detail = (await server.handle({ method: 'GET', url: '/api/skus/sku-10201', headers: {} }))
-      .body as SkuDetail;
+    const detail = (
+      await server.handle({
+        method: 'GET',
+        url: '/api/skus/sku-10201',
+        headers: await auth('u-kim'),
+      })
+    ).body as SkuDetail;
     return detail.stocks.find((stock) => stock.location.code === code)?.onHand ?? 0;
   }
 

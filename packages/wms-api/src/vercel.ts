@@ -15,12 +15,19 @@ function strictSsl(url: string): string {
   return url.replace(/([?&]sslmode=)(require|prefer|verify-ca)\b/, '$1verify-full');
 }
 
-function getHandler(url: string): Promise<ApiHandler> {
-  handler ??= createApiHandler(
-    fromPgPool(
-      new pg.Pool({ connectionString: strictSsl(url), max: 3, idleTimeoutMillis: 10_000 }),
-    ),
-  ).catch((error: unknown) => {
+function createPool(url: string): pg.Pool {
+  const pool = new pg.Pool({ connectionString: strictSsl(url), max: 3, idleTimeoutMillis: 10_000 });
+  // 쉬던 연결이 끊기면 풀이 'error'를 냅니다. 듣지 않으면 함수 프로세스가 죽어 처리 중인 요청까지 끊깁니다.
+  // 끊긴 연결은 풀이 버리고 다음 요청에서 새로 맺으므로 기록만 남깁니다.
+  pool.on('error', (error) => console.error('[sog] 쉬던 DB 연결이 끊겼습니다.', error.message));
+  return pool;
+}
+
+function getHandler(url: string, authSecret: string): Promise<ApiHandler> {
+  handler ??= createApiHandler(fromPgPool(createPool(url)), {
+    authSecret,
+    cronSecret: process.env['CRON_SECRET'],
+  }).catch((error: unknown) => {
     handler = null;
     throw error;
   });
@@ -62,8 +69,16 @@ export default async function vercelHandler(
     res.end(JSON.stringify({ mode: 'remote' }));
     return;
   }
+  // 서명 키가 없으면 데모용 고정 키로 대신하지 않고 멈춥니다(누구나 토큰을 만들 수 있게 되므로).
+  const authSecret = process.env['AUTH_SECRET'];
+  if (!authSecret || authSecret.length < 32) {
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ code: 'VALIDATION', message: '서버 설정(AUTH_SECRET)이 없습니다.' }));
+    return;
+  }
   try {
-    const api = await getHandler(url);
+    const api = await getHandler(url, authSecret);
     await sendResponse(res, await api.handle(await toRequest(req, `https://${host}`)));
   } catch (error) {
     console.error(error);

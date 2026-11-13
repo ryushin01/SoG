@@ -1,6 +1,7 @@
 import type {
   ChangeEvent,
   CountTaskDetail,
+  HistoryEntry,
   LocationDetail,
   LocationOverview,
   Movement,
@@ -13,6 +14,7 @@ import type {
   SkuSummary,
 } from '@sog/domain';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEMO_PASSWORD, issueToken, LOCAL_AUTH_SECRET } from './auth';
 import { createWmsServer, type WmsServer } from './server';
 
 const opened: WmsServer[] = [];
@@ -27,18 +29,31 @@ async function tabs(count: number) {
   return servers;
 }
 
-function call(
+/** 로그인한 사용자로 요청합니다. user: null이면 토큰 없이 보냅니다. */
+async function call(
   server: WmsServer,
   method: string,
   url: string,
-  options: { body?: unknown; ifMatch?: number; user?: string; key?: string } = {},
+  options: {
+    body?: unknown;
+    ifMatch?: number;
+    user?: string | null;
+    key?: string;
+    token?: string;
+  } = {},
 ) {
+  const user = options.user === undefined ? 'u-kim' : options.user;
+  const token =
+    options.token ??
+    (user
+      ? (await issueToken(LOCAL_AUTH_SECRET, user, Math.floor(Date.now() / 1000))).token
+      : undefined);
   return server.handle({
     method,
     url,
     body: options.body,
     headers: {
-      'x-sog-user': options.user ?? 'u-kim',
+      Authorization: token ? `Bearer ${token}` : undefined,
       'If-Match': options.ifMatch === undefined ? undefined : `"${options.ifMatch}"`,
       'Idempotency-Key': options.key,
     },
@@ -330,6 +345,52 @@ describe('실사 흐름', () => {
     expect(sku.stocks.find((s) => s.id === target.stockId)!.onHand).toBe(counted + 4);
   });
 
+  it('확정 수량이 출고 예약보다 적어지는 실사는 승인하지 않는다', async () => {
+    const [server] = await tabs(1);
+    const detail = (await call(server!, 'GET', '/api/counts/ct-004')).body as CountTaskDetail;
+    const target = detail.lines.find((l) => l.expectedQty > 0)!;
+    // 그 품목의 가용 재고를 모두 출고 지시로 예약합니다.
+    const stocks = ((await call(server!, 'GET', `/api/skus/${target.skuId}`)).body as SkuDetail)
+      .stocks;
+    const free = stocks.reduce((sum, s) => sum + Math.max(0, s.onHand - s.reserved), 0);
+    const order = await call(server!, 'POST', '/api/orders', {
+      body: {
+        customer: '예약',
+        dueAt: new Date().toISOString(),
+        assigneeId: 'u-lee',
+        lines: [{ skuId: target.skuId, qty: free }],
+      },
+    });
+    expect(order.status).toBe(201);
+
+    // 예약된 재고를 0개로 셉니다.
+    for (const line of detail.lines) {
+      const fresh = (await call(server!, 'GET', '/api/counts/ct-004')).body as CountTaskDetail;
+      const current = fresh.lines.find((l) => l.id === line.id)!;
+      await call(server!, 'PUT', `/api/counts/ct-004/lines/${line.id}`, {
+        body: { countedQty: line.id === target.id ? 0 : line.expectedQty },
+        ifMatch: current.version,
+        user: 'u-lee',
+      });
+    }
+    const task = ((await call(server!, 'GET', '/api/counts/ct-004')).body as CountTaskDetail).task;
+    await call(server!, 'POST', '/api/counts/ct-004/submit', {
+      ifMatch: task.version,
+      user: 'u-lee',
+    });
+    const review = (await call(server!, 'GET', '/api/counts/ct-004')).body as CountTaskDetail;
+    const approve = await call(server!, 'POST', '/api/counts/ct-004/approve', {
+      ifMatch: review.task.version,
+    });
+    expect(approve.status).toBe(409);
+    expect((approve.body as { code: string }).code).toBe('INSUFFICIENT_STOCK');
+    const after = ((await call(server!, 'GET', `/api/skus/${target.skuId}`)).body as SkuDetail)
+      .stocks;
+    expect(after.find((s) => s.id === target.stockId)!.onHand).toBe(
+      stocks.find((s) => s.id === target.stockId)!.onHand,
+    );
+  });
+
   it('아직 세지 않은 줄이 있으면 제출할 수 없다', async () => {
     const [server] = await tabs(1);
     const detail = (await call(server!, 'GET', '/api/counts/ct-003')).body as CountTaskDetail;
@@ -480,7 +541,7 @@ describe('출고 지시', () => {
       },
       user: 'u-lee',
     });
-    expect(made.status).toBe(409);
+    expect(made.status).toBe(403);
     const detail = (await call(server!, 'GET', '/api/orders/so-003')).body as OrderDetail;
     const a = detail.route[0]!;
     const noReason = await call(server!, 'PUT', `/api/orders/so-003/allocations/${a.id}`, {
@@ -517,5 +578,116 @@ describe('출고 지시', () => {
     });
     expect(cancelled.status).toBe(200);
     expect(before - (await reservedOf())).toBe(detail.route.reduce((s, a) => s + a.qty, 0));
+  });
+});
+
+describe('로그인과 권한', () => {
+  it('공개 비밀번호로 로그인하면 토큰을 받고, 틀리면 401', async () => {
+    const [server] = await tabs(1);
+    const ok = await call(server!, 'POST', '/api/auth/login', {
+      body: { userId: 'u-lee', password: DEMO_PASSWORD },
+      user: null,
+    });
+    expect(ok.status).toBe(200);
+    const token = (ok.body as { token: string }).token;
+    const tasks = await call(server!, 'GET', '/api/counts?assigneeId=u-lee', { token, user: null });
+    expect(tasks.status).toBe(200);
+    const wrong = await call(server!, 'POST', '/api/auth/login', {
+      body: { userId: 'u-lee', password: 'x' },
+      user: null,
+    });
+    expect(wrong.status).toBe(401);
+  });
+
+  it('토큰이 없거나 위조·만료되면 401, 기준 정보는 로그인 없이 볼 수 있다', async () => {
+    const [server] = await tabs(1);
+    expect((await call(server!, 'GET', '/api/skus', { user: null })).status).toBe(401);
+    const forged = (await issueToken('other-secret', 'u-kim', Math.floor(Date.now() / 1000))).token;
+    expect((await call(server!, 'GET', '/api/skus', { token: forged, user: null })).status).toBe(
+      401,
+    );
+    const expired = (
+      await issueToken(LOCAL_AUTH_SECRET, 'u-kim', Math.floor(Date.now() / 1000) - 10, 5)
+    ).token;
+    expect((await call(server!, 'GET', '/api/skus', { token: expired, user: null })).status).toBe(
+      401,
+    );
+    expect((await call(server!, 'GET', '/api/reference', { user: null })).status).toBe(200);
+  });
+
+  it('작업자는 관리자 기능을 쓸 수 없고, 남에게 배정된 실사·피킹도 할 수 없다', async () => {
+    const [server] = await tabs(1);
+    expect((await call(server!, 'POST', '/api/_reset', { user: 'u-lee' })).status).toBe(403);
+    const detail = (await call(server!, 'GET', '/api/skus/sku-10201', { user: 'u-lee' }))
+      .body as SkuDetail;
+    expect(
+      (
+        await call(server!, 'PATCH', '/api/skus/sku-10201', {
+          body: { safetyStock: 1 },
+          ifMatch: detail.sku.version,
+          user: 'u-lee',
+        })
+      ).status,
+    ).toBe(403);
+
+    // ct-003은 이서준 담당: 최민아는 셀 수 없음
+    const task = (await call(server!, 'GET', '/api/counts/ct-003', { user: 'u-choi' }))
+      .body as CountTaskDetail;
+    const line = task.lines.find((l) => l.status === 'pending')!;
+    const other = await call(server!, 'PUT', `/api/counts/ct-003/lines/${line.id}`, {
+      body: { countedQty: 1 },
+      ifMatch: line.version,
+      user: 'u-choi',
+    });
+    expect(other.status).toBe(403);
+    const own = await call(server!, 'PUT', `/api/counts/ct-003/lines/${line.id}`, {
+      body: { countedQty: 1 },
+      ifMatch: line.version,
+      user: 'u-lee',
+    });
+    expect(own.status).toBe(200);
+  });
+});
+
+describe('변경 이력', () => {
+  it('품목 수정·재고 조정을 이전 값과 함께 남기고, 막힌 시도도 남긴다', async () => {
+    const [a, b] = await tabs(2);
+    const detail = (await call(a!, 'GET', '/api/skus/sku-10201')).body as SkuDetail;
+    await call(a!, 'PATCH', '/api/skus/sku-10201', {
+      body: { safetyStock: 11 },
+      ifMatch: detail.sku.version,
+    });
+    const blocked = await call(b!, 'PATCH', '/api/skus/sku-10201', {
+      body: { safetyStock: 99 },
+      ifMatch: detail.sku.version,
+      user: 'u-park',
+    });
+    expect(blocked.status).toBe(412);
+    const stock = detail.stocks[0]!;
+    await call(a!, 'POST', `/api/stocks/${stock.id}/adjust`, {
+      body: { onHand: stock.onHand + 2, reason: '실물 확인' },
+      ifMatch: stock.version,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const { items } = (await call(a!, 'GET', '/api/skus/sku-10201/history')).body as {
+      items: HistoryEntry[];
+    };
+    const skuEdit = items.find((e) => e.kind === 'sku' && !e.blocked)!;
+    expect(skuEdit.changes).toEqual([
+      { field: 'safetyStock', label: '안전 재고', before: detail.sku.safetyStock, after: 11 },
+    ]);
+    expect(skuEdit.by).toBe('u-kim');
+    const attempt = items.find((e) => e.blocked)!;
+    expect(attempt.by).toBe('u-park');
+    expect(attempt.changes[0]).toMatchObject({ field: 'safetyStock', before: 11, after: 99 });
+    const adjust = items.find((e) => e.kind === 'stock')!;
+    expect(adjust.changes[0]).toMatchObject({
+      field: 'onHand',
+      before: stock.onHand,
+      after: stock.onHand + 2,
+    });
+    expect(adjust.locationCode).toBe(stock.location.code);
+    expect(adjust.reason).toContain('조정');
   });
 });

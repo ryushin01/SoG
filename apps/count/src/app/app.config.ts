@@ -29,7 +29,7 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
     ),
     { provide: TitleStrategy, useClass: PageTitleStrategy },
-    provideWmsClient({ latency: [150, 450] }, '현장 앱'),
+    provideWmsClient({ latency: [150, 450] }, '현장 앱', 'local'),
     // 앱 파일을 기기에 두어 창고 안 음영 지역에서도 화면이 열리게 합니다.
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

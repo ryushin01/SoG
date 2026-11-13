@@ -62,6 +62,8 @@ const config = {
     { src: '^/count/.*$', dest: '/count/index.html' },
     { src: '^/.*$', dest: '/index.html' },
   ],
+  // 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다. Vercel이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
+  crons: [{ path: '/api/cron/reset', schedule: '0 18 * * *' }],
 };
 writeFileSync(join(out, 'config.json'), JSON.stringify(config, null, 2));
 console.log('.vercel/output 준비 완료: static/, functions/api.func, config.json');

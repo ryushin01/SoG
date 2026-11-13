@@ -35,6 +35,9 @@ export class KeyValueStore<T> {
       const request = work(tx.objectStore(this.storeName));
       tx.oncomplete = () => resolve(request.result);
       tx.onerror = () => reject(tx.error);
+      // 요청 오류 없이 커밋 단계에서 취소되면(예: 저장 공간 초과) onerror가 오지 않습니다.
+      tx.onabort = () =>
+        reject(tx.error ?? new DOMException('트랜잭션이 취소되었습니다.', 'AbortError'));
     });
   }
 
@@ -52,5 +55,13 @@ export class KeyValueStore<T> {
 
   async delete(key: string): Promise<void> {
     await this.run('readwrite', (store) => store.delete(key));
+  }
+
+  /** 한 트랜잭션으로 removeKey를 지우고 key에 씁니다. 하나라도 실패하면 둘 다 되돌립니다. */
+  async replace(removeKey: string, key: string, value: T): Promise<void> {
+    await this.run('readwrite', (store) => {
+      store.delete(removeKey);
+      return store.put(value, key);
+    });
   }
 }

@@ -197,3 +197,36 @@ export interface ShipmentOrder extends Versioned {
   shippedAt: ISODateString | null;
   lines: OrderLine[];
 }
+
+export type HistoryKind = 'sku' | 'stock' | 'countLine';
+
+export interface HistoryChange {
+  field: string;
+  /** 화면에 보일 이름 */
+  label: string;
+  before: string | number | null;
+  after: string | number | null;
+}
+
+/**
+ * 변경 이력. 품목·재고·실사 항목 문서가 바뀔 때마다 서버가 자동으로 남깁니다.
+ * blocked는 버전 충돌(412)로 막힌 시도이며, after에 시도한 값을 담습니다.
+ */
+export interface HistoryEntry {
+  id: string;
+  kind: HistoryKind;
+  /** 바뀐 문서 ID(품목, 재고, 실사 항목) */
+  docId: string;
+  /** 모아 보기 위한 품목 ID */
+  skuId: string;
+  /** 바뀐 뒤 버전. 막힌 시도는 시도할 때 보낸 버전 */
+  version: number;
+  at: ISODateString;
+  by: string;
+  /** 어떤 업무로 바뀌었는지(활동 기록 문구) */
+  reason: string;
+  /** 재고·실사 항목이면 로케이션 코드 */
+  locationCode: string | null;
+  changes: HistoryChange[];
+  blocked: boolean;
+}

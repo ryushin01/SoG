@@ -1,13 +1,19 @@
 import { PGlite } from '@electric-sql/pglite';
 import type { Movement, Page, SkuDetail, SkuSummary } from '@sog/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { issueToken } from '@sog/wms-server';
 import { type ApiHandler, createApiHandler } from './api';
+
+const SECRET = 'test-secret-test-secret-test-secret';
 import { fromPglite } from './sql';
 
 let api: ApiHandler;
 
 beforeEach(async () => {
-  api = await createApiHandler(fromPglite(await PGlite.create()));
+  api = await createApiHandler(fromPglite(await PGlite.create()), {
+    authSecret: SECRET,
+    cronSecret: 'cron-test',
+  });
 });
 
 afterEach(async () => {
@@ -17,9 +23,20 @@ afterEach(async () => {
 async function call<T = unknown>(
   method: string,
   path: string,
-  options: { body?: unknown; ifMatch?: number; user?: string; key?: string; origin?: string } = {},
+  options: {
+    body?: unknown;
+    ifMatch?: number;
+    user?: string | null;
+    key?: string;
+    origin?: string;
+  } = {},
 ): Promise<{ status: number; body: T; headers: Headers }> {
-  const headers = new Headers({ 'x-sog-user': options.user ?? 'u-kim' });
+  const user = options.user === undefined ? 'u-kim' : options.user;
+  const headers = new Headers();
+  if (user) {
+    const { token } = await issueToken(SECRET, user, Math.floor(Date.now() / 1000));
+    headers.set('authorization', `Bearer ${token}`);
+  }
   if (options.body !== undefined) headers.set('content-type', 'application/json');
   if (options.ifMatch !== undefined) headers.set('if-match', `"${options.ifMatch}"`);
   if (options.key) headers.set('idempotency-key', options.key);
@@ -54,6 +71,26 @@ describe('실제 서버(Postgres)', () => {
     expect((await call<{ mode: string }>('GET', '/api/health')).body.mode).toBe('remote');
     const page = (await call<Page<SkuSummary>>('GET', '/api/skus?size=5')).body;
     expect(page.total).toBe(48);
+  });
+
+  it('시드 버전이 바뀌어도 실제 서버의 데이터는 지우지 않는다', async () => {
+    // 배포 중에는 옛 함수와 새 함수가 함께 돌 수 있어, 버전 차이로 다시 채우면 운영 데이터를 거듭 지웁니다.
+    await api.close();
+    const pglite = await PGlite.create();
+    api = await createApiHandler(fromPglite(pglite), { authSecret: SECRET });
+    await call('GET', '/api/reference', { user: null });
+    await pglite.query(`insert into docs values ('skus', 'sku-marker', '{"id":"sku-marker"}')`);
+    await pglite.query(
+      `update docs set data = jsonb_set(data, '{version}', '1') where store = 'meta' and id = 'seed'`,
+    );
+
+    // 새 인스턴스(새 배포)가 같은 DB로 첫 요청을 받습니다.
+    api = await createApiHandler(fromPglite(pglite), { authSecret: SECRET });
+    await call('GET', '/api/reference', { user: null });
+    const marker = await pglite.query(
+      `select 1 from docs where store = 'skus' and id = 'sku-marker'`,
+    );
+    expect(marker.rows).toHaveLength(1);
   });
 
   it('동시에 가용 재고를 넘게 출고하면 트랜잭션 잠금으로 하나만 성공한다', async () => {
@@ -139,11 +176,29 @@ describe('실제 서버(Postgres)', () => {
       editing: false,
       detail: 'A-02-01-1',
     };
-    expect((await call('POST', '/api/presence', { body: peer })).status).toBe(204);
+    // 본문에 다른 사용자를 적어도 토큰의 사용자(이서준)로 남습니다.
+    expect(
+      (await call('POST', '/api/presence', { body: { ...peer, userId: 'u-kim' }, user: 'u-lee' }))
+        .status,
+    ).toBe(204);
     expect((await call<{ items: unknown[] }>('GET', '/api/presence')).body.items).toEqual([peer]);
     expect((await call('POST', '/api/presence', { body: { tabId: 't2' } })).status).toBe(400);
     await call('DELETE', '/api/presence/t1');
     expect((await call<{ items: unknown[] }>('GET', '/api/presence')).body.items).toEqual([]);
+  });
+
+  it('변경 피드·접속 표시는 로그인이 필요하고, 초기화 예약 작업은 CRON_SECRET이 필요하다', async () => {
+    expect((await call('GET', '/api/changes', { user: null })).status).toBe(401);
+    expect((await call('GET', '/api/presence', { user: null })).status).toBe(401);
+    expect((await call('GET', '/api/skus', { user: null })).status).toBe(401);
+    const denied = await api.handle(new Request('https://sog.test/api/cron/reset'));
+    expect(denied.status).toBe(401);
+    const allowed = await api.handle(
+      new Request('https://sog.test/api/cron/reset', {
+        headers: { authorization: 'Bearer cron-test' },
+      }),
+    );
+    expect(allowed.status).toBe(200);
   });
 
   it('JSON이 아닌 본문은 400', async () => {

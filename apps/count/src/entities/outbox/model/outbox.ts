@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { computed, DestroyRef, effect, inject, Injectable, signal } from '@angular/core';
 import type { CountLineView, SubmitCountLineRequest } from '@sog/domain';
 import { firstValueFrom } from 'rxjs';
-import { idempotencyKey, ifMatch, NetworkState, toApiError } from '@/shared/api';
+import { AuthSession, idempotencyKey, ifMatch, NetworkState, toApiError } from '@/shared/api';
 import { KeyValueStore, LOCAL_DB_NAME } from '@/shared/lib';
 
 export type OutboxState = 'pending' | 'sending' | 'conflict' | 'failed';
@@ -40,6 +40,7 @@ const RETRY_MS = 15_000;
 export class Outbox {
   private readonly http = inject(HttpClient);
   private readonly network = inject(NetworkState);
+  private readonly auth = inject(AuthSession);
   private readonly store = new KeyValueStore<OutboxItem>(inject(LOCAL_DB_NAME), 'outbox');
   private flushing = false;
 
@@ -58,7 +59,8 @@ export class Outbox {
   constructor() {
     void this.restore();
     effect(() => {
-      if (this.network.online() && this.ready()) void this.flush();
+      // 연결되어 있고 로그인되어 있으면 보냅니다(다시 로그인하면 남은 기록을 바로 보냄).
+      if (this.network.online() && this.ready() && this.auth.signedIn()) void this.flush();
     });
     const timer = setInterval(() => {
       if (this.waiting().length > 0) void this.flush();
@@ -79,7 +81,6 @@ export class Outbox {
     const previous = this.items().find(
       (item) => item.lineId === input.lineId && item.state !== 'sending',
     );
-    if (previous) await this.remove(previous.id);
     const item: OutboxItem = {
       ...input,
       id: idempotencyKey(),
@@ -88,7 +89,20 @@ export class Outbox {
       message: null,
       attempts: 0,
     };
-    await this.save(item, true);
+    if (previous) {
+      // 기기에 쓰는 동안 보내기가 이전 기록을 집어 가지 않도록 목록에서 먼저 뺍니다.
+      this.items.update((items) => items.filter((i) => i.id !== previous.id));
+      try {
+        // 지우기와 쓰기를 한 트랜잭션으로 묶어, 새 기록을 못 쓰면 이전 기록도 남깁니다.
+        await this.store.replace(previous.id, item.id, item);
+      } catch (error) {
+        this.items.update((items) => [...items, previous]);
+        throw error;
+      }
+      this.items.update((items) => [...items, item]);
+    } else {
+      await this.save(item, true);
+    }
     void this.flush();
     return item;
   }
@@ -107,7 +121,7 @@ export class Outbox {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing || !this.network.online()) return;
+    if (this.flushing || !this.network.online() || !this.auth.signedIn()) return;
     this.flushing = true;
     this.syncing.set(true);
     try {
@@ -115,7 +129,10 @@ export class Outbox {
         .filter((i) => i.state === 'pending')
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
         if (!this.network.online()) break;
-        const stop = await this.send(item);
+        // 보내는 사이 새 기록으로 바뀌었거나 지워졌으면 건너뜁니다.
+        const current = this.items().find((i) => i.id === item.id);
+        if (current?.state !== 'pending') continue;
+        const stop = await this.send(current);
         if (stop) break;
       }
     } finally {
@@ -139,6 +156,16 @@ export class Outbox {
       return false;
     } catch (error) {
       const apiError = toApiError(error);
+      if (apiError.code === 'UNAUTHENTICATED') {
+        // 로그인이 풀렸으면 기록은 그대로 두고, 다시 로그인한 뒤 보냅니다.
+        await this.save({
+          ...item,
+          state: 'pending',
+          message: '다시 로그인하면 보냅니다.',
+          attempts: item.attempts + 1,
+        });
+        return true;
+      }
       if (apiError.code === 'NETWORK') {
         await this.save({ ...item, state: 'pending', attempts: item.attempts + 1 });
         return true;
@@ -163,8 +190,20 @@ export class Outbox {
    * 저장되지 않았는데 저장된 것처럼 보이지 않게 합니다(상태 전환 같은 내부 갱신은 strict가 아님).
    */
   private async save(item: OutboxItem, strict = false): Promise<void> {
-    if (strict) await this.store.set(item.id, item);
-    else await this.store.set(item.id, item).catch(() => undefined);
+    if (strict) {
+      await this.store.set(item.id, item);
+    } else {
+      // 상태 갱신은 목록에 있는 항목에만 합니다. 그사이 새 기록으로 바뀐 항목을 되살리지 않습니다.
+      if (!this.items().some((i) => i.id === item.id)) return;
+      // 목록을 먼저 바꿔, 기기에 쓰는 동안 다른 작업이 옛 상태를 보지 않게 합니다.
+      this.replaceInList(item);
+      await this.store.set(item.id, item).catch(() => undefined);
+      return;
+    }
+    this.replaceInList(item);
+  }
+
+  private replaceInList(item: OutboxItem): void {
     this.items.update((items) => {
       const index = items.findIndex((i) => i.id === item.id);
       if (index === -1) return [...items, item];
