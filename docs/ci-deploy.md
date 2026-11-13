@@ -32,7 +32,7 @@ Worker 하나(`sog`)에 두 앱의 정적 파일과 `/api`를 함께 올립니�
 | https://sog.ryushin01.workers.dev/storybook/backoffice | 백오피스 Storybook |
 | https://sog.ryushin01.workers.dev/storybook/count | 실사 앱 Storybook |
 
-- 배포: `main`에 머지하면 CI의 `deploy` 작업이 두 앱과 Storybook을 빌드하고, `scripts/build-cloudflare.mjs`로 `site/`를 만든 뒤 `wrangler deploy`로 올립니다. Actions에서 CI를 직접 실행해도(workflow_dispatch) 다시 배포합니다. 저장소 Secret `CLOUDFLARE_API_TOKEN`(Workers 편집 권한)과 `CLOUDFLARE_ACCOUNT_ID`가 필요합니다.
+- 배포: `main`에 머지하면 CI의 `deploy` 작업이 두 앱과 Storybook을 빌드하고, `scripts/build-cloudflare.mjs`로 `site/`를 만든 뒤 `wrangler deploy`로 올립니다. Actions에서 CI를 직접 실행해도(workflow_dispatch) 다시 배포합니다. 저장소 Secret `CLOUDFLARE_API_TOKEN`(Workers 편집 권한, Hyperdrive 편집 권한)과 `CLOUDFLARE_ACCOUNT_ID`가 필요하고, 토큰이 없으면 경고만 남기고 배포를 건너뜁니다(그때는 `npx wrangler deploy`로 직접 배포).
 - 배포 건너뛰기: 직전 푸시와 비교해 문서·E2E·테스트·스토리·CI 설정만 바뀌었으면 배포하지 않습니다.
 - 라우팅: Worker는 `/api/*`와 실사 앱의 화면 주소(`/count/` 아래 점 없는 주소)만 받고, 나머지 파일은 Cloudflare가 바로 내보냅니다(`assets.run_worker_first`). 실사 앱 화면 주소는 실사 앱의 `index.html`로, 그 밖의 없는 주소는 백오피스의 `index.html`로 답합니다.
 - Storybook: 폴더 주소로 열면 상대 경로 파일을 못 찾으므로 `index.html`로 redirect합니다(`site/_redirects`).
