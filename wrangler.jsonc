@@ -22,5 +22,8 @@
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "6d27a0e9438a4f6abe37cb80b67f2d8c" }],
   // 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다(cloudflare.ts의 scheduled).
   "triggers": { "crons": ["0 18 * * *"] },
+  // API는 요청 하나에 쿼리를 여러 번 차례로 보내므로, Worker를 DB(Neon, AWS 싱가포르) 가까이에서 돌립니다.
+  // 화면 파일은 이 설정과 상관없이 방문자 가까이에서 나갑니다.
+  "placement": { "region": "aws:ap-southeast-1" },
   "observability": { "enabled": true },
 }
