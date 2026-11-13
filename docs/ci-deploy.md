@@ -47,3 +47,7 @@ E2E_BASE_URL=https://sog-ryushin01.vercel.app pnpm --filter @sog/e2e exec playwr
 ```
 
 로컬 서버 없이 배포된 사이트(실제 서버 모드)에 같은 E2E를 돌립니다. 테스트마다 서버 데이터를 초기화하므로, 다른 사람이 쓰고 있을 때는 돌리지 않습니다.
+
+## PR 미리보기 배포
+
+Vercel의 하루 배포 한도를 아끼려고 PR 미리보기 배포를 껐습니다(`vercel.json`의 `git.deploymentEnabled`). `main`에 머지할 때만 운영으로 배포하고, PR에서는 CI 검사만 돕니다. 미리보기가 꼭 필요하면 그 브랜치를 `deploymentEnabled`에 잠시 넣습니다.
