@@ -1,15 +1,15 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-0.4.0-911a46)
+![version](https://img.shields.io/badge/version-0.4.1-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
 물류창고의 재고를 관리하는 백오피스와, 창고 현장에서 재고 실사·피킹을 하는 작업자용 PWA를 한 저장소에 담은 모노레포입니다. 두 사람이 같은 재고를 동시에 고쳐도, 실사 도중 물건이 들고 나도, 마지막 재고를 두 출고 지시가 동시에 잡으려 해도, 음영 지역에서 연결이 끊겨도 재고가 어긋나지 않도록 동시성 제어에 집중했습니다.
 
-**[백오피스 보기](https://sog-ryushin01.vercel.app/)** · **[현장 실사 앱 보기](https://sog-ryushin01.vercel.app/count/)** · **[Storybook](https://sog-ryushin01.vercel.app/storybook/backoffice)** · 데모 계정의 비밀번호는 모두 `sog-demo`입니다. 데이터는 서버(Postgres)에 있어서, 휴대폰으로 실사 앱을 열고 PC로 백오피스를 열면 센 수량과 피킹이 바로 나타납니다.
+**[백오피스 보기](https://sog.ryushin01.workers.dev/)** · **[현장 실사 앱 보기](https://sog.ryushin01.workers.dev/count/)** · **[Storybook](https://sog.ryushin01.workers.dev/storybook/backoffice)** · 데모 계정의 비밀번호는 모두 `sog-demo`입니다. 데이터는 서버(Postgres)에 있어서, 휴대폰으로 실사 앱을 열고 PC로 백오피스를 열면 센 수량과 피킹이 바로 나타납니다.
 
-> **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 운영 사이트는 Vercel 함수와 Neon(Postgres) 위의 실제 서버로, 개발 서버와 미리보기 배포는 같은 코드를 브라우저 안(IndexedDB)에서 돌리는 데모 서버로 동작합니다. 품목·작업자·재고는 모두 가상 데이터이고, 매일 03:00(KST)에 처음 상태로 돌아갑니다.
+> **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 운영 사이트는 Cloudflare Workers와 Neon(Postgres) 위의 실제 서버로, 개발 서버와 `pnpm preview`는 같은 코드를 브라우저 안(IndexedDB)에서 돌리는 데모 서버로 동작합니다. 품목·작업자·재고는 모두 가상 데이터이고, 매일 03:00(KST)에 처음 상태로 돌아갑니다.
 
 ## 화면
 
@@ -63,17 +63,17 @@
 
 ## 기술 스택
 
-![Angular, TypeScript, PostgreSQL, Vite, pnpm, Vitest, Vercel, GitHub Actions](https://skillicons.dev/icons?i=angular,ts,postgres,vite,pnpm,vitest,vercel,githubactions)
+![Angular, TypeScript, PostgreSQL, Vite, pnpm, Vitest, Cloudflare, GitHub Actions](https://skillicons.dev/icons?i=angular,ts,postgres,vite,pnpm,vitest,cloudflare,githubactions)
 
 | 구분 | 사용 기술 |
 |---|---|
 | 구성 | pnpm 워크스페이스, Turborepo, Feature-Sliced Design v2.1 (Steiger로 검사) |
 | 프레임워크 | Angular 22 (standalone, zoneless, signals, `@if`·`@for`, `@defer`, Signal Forms, `httpResource`), TypeScript 6 |
 | PWA | @angular/service-worker(SwUpdate), Web App Manifest, BarcodeDetector, Vibration API |
-| 서버·데이터 | Vercel Functions(Build Output API), Neon Postgres, node-postgres, PGlite(테스트·로컬), 브라우저 데모 서버(IndexedDB, Web Locks, BroadcastChannel) |
+| 서버·데이터 | Cloudflare Workers(정적 자산 + `/api`), Hyperdrive, Neon Postgres, node-postgres, PGlite(테스트·로컬), 브라우저 데모 서버(IndexedDB, Web Locks, BroadcastChannel) |
 | 품질 | ESLint(angular-eslint, 템플릿 접근성 규칙), Prettier, husky + lint-staged, Vitest 5 + Testing Library + fake-indexeddb, Storybook 10(angular-vite) 스토리 테스트(실제 브라우저 + axe), Playwright + axe(프로덕션 빌드·배포 사이트 E2E), size-limit, Lighthouse CI |
 | 모니터링 | Sentry(DSN이 있을 때만), web-vitals (`@sog/monitoring`) |
-| 배포 | Vercel(두 앱을 한 주소로), GitHub Actions, Dependabot |
+| 배포 | Cloudflare Workers(두 앱과 API를 한 주소로), GitHub Actions, Dependabot |
 
 ## 시작하기
 
@@ -106,7 +106,7 @@ apps/
 packages/
 ├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
 ├─ wms-server/   업무 서버 코드(규칙, 버전 검사, 예약). 저장소를 갈아 끼워 브라우저·서버에서 함께 씀
-├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Vercel 함수
+├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Cloudflare Worker 진입점
 └─ wms-client/   Angular HTTP 연결, 변경 알림, 접속 표시, 네트워크 상태, 중복 제출 잠금
 e2e/             프로덕션 빌드 E2E
 docs/            문서와 스크린샷
@@ -120,6 +120,6 @@ docs/            문서와 스크린샷
 | [동시성 제어](docs/concurrency.md) | 낙관적 잠금, 쓰기 직렬화, 멱등 키, 실사 정산, 접속 표시, 화면 쪽 경쟁, 오프라인 |
 | [개발 가이드](docs/development.md) | 구조, Angular 사용 방식, FSD, 개발 서버, 테스트, 접근성 점검 |
 | [디자인](docs/design.md) | 참고 사이트, 두 앱의 디자인 토큰, 품목 그림 |
-| [CI · 배포](docs/ci-deploy.md) | GitHub Actions, Vercel, 배포된 사이트 검사, Dependabot |
+| [CI · 배포](docs/ci-deploy.md) | GitHub Actions, Cloudflare Workers, 배포된 사이트 검사, Dependabot |
 | [시퀀스 다이어그램](docs/sequence-diagrams.md) | 낙관적 잠금 충돌, 현장 실사 보낼함과 실시간 반영, 출고 지시 재고 예약, 실사 승인 정산 |
 | [버전 기록](CHANGELOG.md) | 버전별 변경 내용 |

@@ -1,0 +1,29 @@
+// SoG 운영 배포: Cloudflare Workers(정적 자산 + /api). main에 머지하면 GitHub Actions가 배포합니다(docs/ci-deploy.md).
+{
+  "$schema": "https://unpkg.com/wrangler@4.156.0/config-schema.json",
+  "name": "sog",
+  "main": "packages/wms-api/src/cloudflare.ts",
+  "compatibility_date": "2026-10-29",
+  // node-postgres(pg)가 Node API(net·tls 대신 cloudflare:sockets, AsyncLocalStorage)를 씁니다.
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    // scripts/build-cloudflare.mjs가 만든 배포 구조: / 백오피스, /count/ 현장 실사 앱, /storybook/
+    "directory": "./site",
+    "binding": "ASSETS",
+    // 백오피스의 깊은 주소(/inventory/… 등)는 index.html로 답합니다. 실사 앱은 Worker가 맡습니다.
+    "not_found_handling": "single-page-application",
+    // Worker는 /api와 현장 실사 앱의 화면 주소(/count/ 아래 점 없는 주소)만 받고,
+    // 나머지 파일(JS·CSS·이미지)은 Cloudflare가 바로 내보냅니다(Worker 요청 한도를 쓰지 않음).
+    "run_worker_first": ["/api/*", "/count/*", "!/count/*.*"],
+  },
+  // Neon(싱가포르) 연결 풀. 쿼리 결과 캐시는 껐습니다(변경 피드·접속 표시가 늦게 보이지 않게).
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "6d27a0e9438a4f6abe37cb80b67f2d8c" }],
+  // 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다(cloudflare.ts의 scheduled).
+  "triggers": { "crons": ["0 18 * * *"] },
+  // API는 요청 하나에 쿼리를 여러 번 차례로 보내므로, Worker를 DB(Neon, AWS 싱가포르) 가까이에서 돌립니다.
+  // 화면 파일은 이 설정과 상관없이 방문자 가까이에서 나갑니다.
+  "placement": { "region": "aws:ap-southeast-1" },
+  "observability": { "enabled": true },
+}

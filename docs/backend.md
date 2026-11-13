@@ -4,10 +4,10 @@
 
 | | 데모 모드 | 실제 서버 모드 |
 |---|---|---|
-| 어디서 | 개발 서버, Vercel 미리보기, `pnpm preview` | 운영 사이트, `pnpm preview:api` |
-| 업무 서버 | 브라우저 안 | Vercel 함수(`/api`, 싱가포르 `sin1`) |
-| 저장 | IndexedDB(`sog-wms`) | Neon Postgres(같은 지역), 로컬은 PGlite |
-| 쓰기 직렬화 | Web Locks(같은 브라우저의 탭 사이) | 트랜잭션 + `pg_advisory_xact_lock`(함수 인스턴스 사이) |
+| 어디서 | 개발 서버, `pnpm preview` | 운영 사이트, `pnpm preview:api` |
+| 업무 서버 | 브라우저 안 | Cloudflare Worker(`/api`, Hyperdrive로 싱가포르 Neon에 연결) |
+| 저장 | IndexedDB(`sog-wms`) | Neon Postgres(싱가포르), 로컬은 PGlite |
+| 쓰기 직렬화 | Web Locks(같은 브라우저의 탭 사이) | 트랜잭션 + `pg_advisory_xact_lock`(Worker 실행 환경 사이) |
 | 변경 알림 | BroadcastChannel | `events` 테이블 + `/api/changes` 폴링 |
 | 접속 표시 | BroadcastChannel | `presence` 테이블 + `/api/presence` |
 | 데이터를 보는 범위 | 이 브라우저만 | 모든 기기 |
@@ -70,14 +70,16 @@ COMMIT                                      -- 잠금 해제
 - **변경 피드:** 쓰기가 끝나면 `events`에 순번과 함께 남깁니다. 클라이언트는 처음에 마지막 순번을 받고, 2.5초마다(화면이 숨겨지면 10초) `/api/changes?after=순번`으로 놓친 변경을 이어 받습니다. 연결이 끊겼다 돌아와도 순번으로 이어 받으므로 빠지는 변경이 없습니다. 하루 지난 기록은 가끔 지웁니다.
 - **접속 표시:** 탭마다 5초 간격과 상태가 바뀔 때 `/api/presence`에 신호를 보내고, 3초마다 목록을 받습니다. 15초 동안 신호가 없거나 탭을 닫으면(`pagehide` → `DELETE`) 사라집니다.
 
-웹소켓 대신 폴링을 고른 것은 Vercel 함수가 오래 열린 연결을 지원하지 않기 때문입니다. 폴링 응답은 대부분 빈 목록이라 가볍습니다.
+웹소켓 대신 폴링을 고른 것은 처음 배포한 Vercel 함수가 오래 열린 연결을 지원하지 않았기 때문입니다. Cloudflare에서도 여러 기기에 알림을 보내는 웹소켓에는 Durable Objects가 따로 필요해 폴링을 유지합니다. 폴링 응답은 대부분 빈 목록이라 가볍습니다.
 
 ## 배포
 
-- `scripts/build-api.mjs`: esbuild로 `/api` 코드를 파일 하나로 묶습니다(`vercel.mjs`: node-postgres, `local.mjs`: PGlite).
-- `scripts/build-vercel.mjs`: [Build Output API](https://vercel.com/docs/build-output-api/v3) 형식으로 `.vercel/output`을 만듭니다. 정적 사이트, `api.func`(Node 22, `sin1`), 라우팅·캐시 규칙(`config.json`)이 들어갑니다.
-- DB는 Vercel Marketplace의 Neon 연동으로 만들었고, **운영 환경에만** `DATABASE_URL`을 넣었습니다. `AUTH_SECRET`·`CRON_SECRET`도 운영 환경에만 Secret으로 둡니다.
-- 매일 03:00(KST) Vercel Cron이 `/api/cron/reset`을 `Authorization: Bearer <CRON_SECRET>`으로 불러 데모 데이터를 처음 상태로 되돌립니다(`config.json`의 `crons`).
+- `wrangler.jsonc`: Cloudflare Worker(`sog`) 설정입니다. `site/`를 정적 자산으로 올리고, `/api/*`와 실사 앱 화면 주소만 Worker(`packages/wms-api/src/cloudflare.ts`)가 받습니다.
+- `cloudflare.ts`: API 처리기와 업무 서버는 실행 환경(isolate)마다 한 번만 만들고, DB 연결만 요청마다 Hyperdrive로 엽니다. Workers는 한 요청에서 연 연결을 다른 요청에서 쓰지 못하기 때문입니다. 처리기는 AsyncLocalStorage로 지금 요청의 연결을 찾아 써서, 마이그레이션·시드 확인이 요청마다 돌지 않습니다.
+- `scripts/build-cloudflare.mjs`: 두 앱과 Storybook을 `site/`로 합치고 `_redirects`·`_headers`를 넣습니다.
+- `scripts/build-api.mjs`: 로컬 미리보기·E2E용 `/api`를 esbuild로 묶습니다(`local.mjs`: PGlite).
+- DB는 Neon(싱가포르)이고 Hyperdrive 설정 `sog-db`로 연결합니다(쿼리 결과 캐시는 끔). `AUTH_SECRET`·`CRON_SECRET`은 Worker Secret입니다.
+- 매일 03:00(KST) Cron Trigger가 Worker의 `scheduled`를 불러, `/api/cron/reset`을 `Authorization: Bearer <CRON_SECRET>`으로 처리해 데모 데이터를 처음 상태로 되돌립니다.
 
 ## 로컬에서 실제 서버 모드로
 

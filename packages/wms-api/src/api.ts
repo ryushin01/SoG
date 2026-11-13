@@ -34,7 +34,7 @@ export interface ApiOptions {
   now?: () => Date;
   /** 로그인 토큰 서명 키(운영은 AUTH_SECRET) */
   authSecret: string;
-  /** 매일 밤 초기화(Vercel Cron)를 부를 때 쓰는 키(CRON_SECRET). 없으면 /api/cron/reset을 막습니다. */
+  /** 매일 밤 초기화(Cloudflare Cron Trigger)를 부를 때 쓰는 키(CRON_SECRET). 없으면 /api/cron/reset을 막습니다. */
   cronSecret?: string;
 }
 
@@ -151,7 +151,7 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       try {
         if (url.pathname === '/api/health') return json(200, { mode: 'remote' });
         if (url.pathname === '/api/cron/reset') {
-          // Vercel Cron이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
+          // 예약 작업(Worker의 scheduled)이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
           if (
             !options.cronSecret ||
             request.headers.get('authorization') !== `Bearer ${options.cronSecret}`
