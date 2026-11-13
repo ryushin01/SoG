@@ -123,3 +123,11 @@ docs/            문서와 스크린샷
 | [CI · 배포](docs/ci-deploy.md) | GitHub Actions, Cloudflare Workers, 배포된 사이트 검사, Dependabot |
 | [시퀀스 다이어그램](docs/sequence-diagrams.md) | 낙관적 잠금 충돌, 현장 실사 보낼함과 실시간 반영, 출고 지시 재고 예약, 실사 승인 정산 |
 | [버전 기록](CHANGELOG.md) | 버전별 변경 내용 |
+
+## 출처
+
+| 자료 | 저작자 | 사용 허락 | 원본 |
+|---|---|---|---|
+| Instrument Serif 글꼴 | The Instrument Serif Project Authors | SIL OFL 1.1 | [Instrument/instrument-serif](https://github.com/Instrument/instrument-serif) |
+
+품목 사진은 이미지 파일 없이 코드(SVG)로 그렸습니다.
