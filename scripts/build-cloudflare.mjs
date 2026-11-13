@@ -16,9 +16,10 @@ execFileSync(process.execPath, [join(root, 'scripts/assemble-site.mjs')], { stdi
 const redirects = ['/count /count/ 308'];
 writeFileSync(join(site, '_redirects'), `${redirects.join('\n')}\n`);
 
-const immutable = ['chunk', 'main', 'polyfills', 'styles'].flatMap((name) => [
-  `/${name}-*`,
-  `/count/${name}-*`,
+// CSS가 부르는 글꼴(media/)도 빌드가 이름에 해시를 붙입니다.
+const immutable = ['chunk-*', 'main-*', 'polyfills-*', 'styles-*', 'media/*'].flatMap((name) => [
+  `/${name}`,
+  `/count/${name}`,
 ]);
 const headers = [
   // 서비스 워커와 그 목록은 늘 새로 받아야 새 버전을 알아챕니다.

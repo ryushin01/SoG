@@ -1,5 +1,11 @@
 # 버전 기록
 
+## 0.4.2 - 2026-11-13
+
+- 글꼴: 품목 코드·로케이션·수량의 고정폭 글꼴을 운영체제 글꼴에서 IBM Plex Mono(라틴 400·500 두 파일, woff2 합계 약 29KB)로 바꿔 0과 O, 1과 l이 기기마다 다르게 보이지 않게 함. 한글은 운영체제 글꼴로 이어짐
+- 현장 실사 앱은 서비스 워커가 이 글꼴을 미리 받아 오프라인에서도 같은 모양으로 보임. 이름에 해시가 붙은 글꼴 파일은 Cloudflare에서 1년 캐시
+- README에 외부 자료 출처 표(Instrument Serif, IBM Plex Mono 글꼴)를 둠
+
 ## 0.4.1 - 2026-11-13
 
 - 운영 이전: Vercel에서 Cloudflare Workers로 옮김(새 주소 https://sog.ryushin01.workers.dev). 옛 주소(`sog-ryushin01.vercel.app`)는 새 주소로 넘어감(308). 두 앱의 정적 파일은 Cloudflare가 바로 내보내고 `/api`만 Worker가 받음. DB는 그대로 Neon(싱가포르)이고 Hyperdrive로 연결(쿼리 결과 캐시 끔)
