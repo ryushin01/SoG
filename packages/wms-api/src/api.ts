@@ -86,7 +86,9 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       topics: string[];
       message: string;
     }>(
-      'select seq::text as seq, at, origin, by_user, topics, message from events where seq > $1 order by seq limit 100',
+      // order by는 출력 별칭(seq, 문자열)을 먼저 따르므로 표의 숫자 열(events.seq)로 정렬합니다.
+      // 문자열로 정렬하면 "10"이 "9"보다 앞서, 커서가 뒤로 가거나(같은 변경을 다시 받음) 변경을 건너뜁니다.
+      'select seq::text as seq, at, origin, by_user, topics, message from events where seq > $1 order by events.seq limit 100',
       [after],
     );
     const items: (ChangeEvent & { seq: string })[] = rows.map((row) => ({
