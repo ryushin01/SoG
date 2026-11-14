@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-0.4.3-911a46)
+![version](https://img.shields.io/badge/version-0.4.4-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -128,7 +128,7 @@ docs/            문서와 스크린샷
 
 | 자료 | 저작자 | 사용 허락 | 원본 |
 |---|---|---|---|
-| Instrument Serif 글꼴 | The Instrument Serif Project Authors | SIL OFL 1.1 | [Instrument/instrument-serif](https://github.com/Instrument/instrument-serif) |
+| Instrument Serif 글꼴 (화면 제목, 파비콘·앱 아이콘 SVG의 'SoG' 글자에도 쓰인 글자만 넣음) | The Instrument Serif Project Authors | SIL OFL 1.1 | [Instrument/instrument-serif](https://github.com/Instrument/instrument-serif) |
 | IBM Plex Mono 글꼴 | IBM Corp. | SIL OFL 1.1 | [IBM/plex](https://github.com/IBM/plex) (`@fontsource/ibm-plex-mono`로 받음) |
 
 품목 사진은 이미지 파일 없이 코드(SVG)로 그렸습니다.
