@@ -167,6 +167,31 @@ describe('실제 서버(Postgres)', () => {
     expect(next.items).toHaveLength(0);
   });
 
+  it('변경 피드는 순번의 자릿수가 바뀌어도 숫자 순서로 주고, 커서는 받은 마지막 순번이다', async () => {
+    const start = Number((await call<{ cursor: string }>('GET', '/api/changes')).body.cursor);
+    // 순번이 다음 10의 거듭제곱(예: 9 → 10)을 넘도록 변경을 쌓습니다.
+    const next = 10 ** String(start + 1).length;
+    const count = next - start + 1;
+    for (let i = 0; i < count; i++) {
+      const detail = (await call<SkuDetail>('GET', '/api/skus/sku-10201')).body;
+      const response = await call('PATCH', '/api/skus/sku-10201', {
+        body: { safetyStock: 20 + i },
+        ifMatch: detail.sku.version,
+      });
+      expect(response.status).toBe(200);
+    }
+    const feed = (
+      await call<{ cursor: string; items: { seq: string }[] }>('GET', `/api/changes?after=${start}`)
+    ).body;
+    const seqs = feed.items.map((item) => Number(item.seq));
+    expect(seqs).toHaveLength(count);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(Number(feed.cursor)).toBe(Math.max(...seqs));
+    const after = (await call<{ items: unknown[] }>('GET', `/api/changes?after=${feed.cursor}`))
+      .body;
+    expect(after.items).toHaveLength(0);
+  });
+
   it('접속 표시를 저장하고 떠나면 지운다', async () => {
     const peer = {
       tabId: 't1',
