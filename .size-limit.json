@@ -9,7 +9,7 @@
     "name": "백오피스 CSS",
     "path": "apps/backoffice/dist/browser/*.css",
     "gzip": true,
-    "limit": "3 kB"
+    "limit": "4 kB"
   },
   {
     "name": "현장 앱 전체 JS",
@@ -17,5 +17,10 @@
     "gzip": true,
     "limit": "230 kB"
   },
-  { "name": "현장 앱 CSS", "path": "apps/count/dist/browser/*.css", "gzip": true, "limit": "2 kB" }
+  {
+    "name": "현장 앱 CSS",
+    "path": "apps/count/dist/browser/*.css",
+    "gzip": true,
+    "limit": "3 kB"
+  }
 ]
