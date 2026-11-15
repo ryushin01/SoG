@@ -11,7 +11,8 @@
           "/manifest.webmanifest",
           "/*.css",
           "/*.js",
-          "/media/ibm-plex-mono-*.woff2"
+          "/media/ibm-plex-mono-*.woff2",
+          "/media/sog-sans-*-ui-*.woff2"
         ]
       }
     },

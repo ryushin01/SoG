@@ -1,0 +1,21 @@
+{
+  "outDir": "apps/count/src/fonts",
+  "restDir": "apps/count/public/fonts",
+  "scan": ["apps/count/src"],
+  "dataExtensions": ["json", "html"],
+  "extra": "년월일시분초오전후요화수목금토만억조",
+  "fonts": [
+    {
+      "family": "SoGSans",
+      "slug": "sog-sans",
+      "rename": true,
+      "weights": {
+        "400": "scripts/fonts/suit/SUIT-Regular.woff2",
+        "500": "scripts/fonts/suit/SUIT-Medium.woff2",
+        "600": "scripts/fonts/suit/SUIT-SemiBold.woff2",
+        "700": "scripts/fonts/suit/SUIT-Bold.woff2",
+        "800": "scripts/fonts/suit/SUIT-ExtraBold.woff2"
+      }
+    }
+  ]
+}
