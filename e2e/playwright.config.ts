@@ -7,8 +7,11 @@ import { defineConfig, devices } from '@playwright/test';
  * E2E_BASE_URL을 주면 로컬 서버 없이 배포된 사이트를 검사합니다(배포된 운영 사이트는 실제 서버 모드).
  */
 const liveUrl = process.env['E2E_BASE_URL'];
-const LOCAL = 'http://localhost:4300';
-const REMOTE = 'http://localhost:4310';
+// README 촬영처럼 다른 포트가 필요하면 E2E_SITE_PORT·E2E_API_PORT로 바꿉니다.
+const SITE_PORT = process.env['E2E_SITE_PORT'] ?? '4300';
+const API_PORT = process.env['E2E_API_PORT'] ?? '4310';
+const LOCAL = `http://localhost:${SITE_PORT}`;
+const REMOTE = `http://localhost:${API_PORT}`;
 
 export default defineConfig({
   testDir: 'tests',
@@ -31,6 +34,16 @@ export default defineConfig({
         },
       ]
     : [
+        // README 화면 촬영(pnpm screenshots). 화면 파일을 덮어쓰므로 SCREENSHOTS=1일 때만 넣습니다.
+        ...(process.env['SCREENSHOTS']
+          ? [
+              {
+                name: 'screenshots',
+                testMatch: /readme\.screenshots\.ts/,
+                use: { ...devices['Desktop Chrome'] },
+              },
+            ]
+          : []),
         {
           name: 'desktop',
           use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 } },
@@ -51,12 +64,13 @@ export default defineConfig({
         {
           command: 'node ../scripts/serve-site.mjs',
           url: LOCAL,
+          env: { PORT: SITE_PORT },
           reuseExistingServer: !process.env['CI'],
         },
         {
           command: 'node ../scripts/serve-site.mjs --api',
           url: `${REMOTE}/api/health`,
-          env: { PORT: '4310' },
+          env: { PORT: API_PORT },
           reuseExistingServer: !process.env['CI'],
         },
       ],
