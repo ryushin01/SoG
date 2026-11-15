@@ -16,3 +16,5 @@ pnpm-lock.yaml
 site/
 e2e/playwright-report/
 .lighthouseci
+apps/*/src/fonts/
+apps/*/public/fonts/

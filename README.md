@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-0.4.4-911a46)
+![version](https://img.shields.io/badge/version-0.5.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -124,11 +124,22 @@ docs/            문서와 스크린샷
 | [시퀀스 다이어그램](docs/sequence-diagrams.md) | 낙관적 잠금 충돌, 현장 실사 보낼함과 실시간 반영, 출고 지시 재고 예약, 실사 승인 정산 |
 | [버전 기록](CHANGELOG.md) | 버전별 변경 내용 |
 
+## 웹 폰트
+
+| 글꼴 | 쓰는 곳 | 굵기 |
+|---|---|---|
+| 수트(SUIT) | 한글 본문·제목 (실사 앱, 백오피스) | 400·500·600·700·800 |
+| Instrument Serif | 백오피스 영문 제목 | 400 |
+| IBM Plex Mono | 품목 코드·로케이션·수량 (영문·숫자) | 400·500 |
+
+저작자·라이선스·원본은 아래 출처 표에 있습니다. 영문 본문은 운영체제 글꼴입니다. 수트는 앱마다 화면에 쓰는 글자만 담은 작은 파일을 먼저 받고, 나머지 글자는 글자 묶음별 조각으로 나눠 그 글자를 쓸 때만 받습니다(`pnpm fonts`로 다시 만듦, fontTools 필요). OFL 예약 이름 때문에 줄인 파일의 글꼴 이름은 `SoGSans`입니다. 실사 앱은 오프라인에서도 쓰도록 서비스 워커가 화면 글자 파일을 미리 받아 둡니다.
+
 ## 출처
 
 | 자료 | 저작자 | 사용 허락 | 원본 |
 |---|---|---|---|
 | Instrument Serif 글꼴 (화면 제목, 파비콘·앱 아이콘 SVG의 'SoG' 글자에도 쓰인 글자만 넣음) | The Instrument Serif Project Authors | SIL OFL 1.1 | [Instrument/instrument-serif](https://github.com/Instrument/instrument-serif) |
 | IBM Plex Mono 글꼴 | IBM Corp. | SIL OFL 1.1 | [IBM/plex](https://github.com/IBM/plex) (`@fontsource/ibm-plex-mono`로 받음) |
+| 수트(SUIT) 글꼴 (한글 본문·제목, 줄인 파일 이름 SoGSans) | SUNN(윤선) | SIL OFL 1.1 | [sun-typeface/SUIT](https://github.com/sun-typeface/SUIT) |
 
 품목 사진은 이미지 파일 없이 코드(SVG)로 그렸습니다.
