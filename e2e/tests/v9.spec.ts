@@ -63,6 +63,9 @@ test('피킹 목록과 동선은 받은 사본으로 오프라인에서도 보�
   const card = page.locator('a.card[href*="/picks/"]').first();
   await expect(card).toBeVisible();
   const customer = (await card.locator('.card__title').textContent())!.trim();
+  // 연결된 곳에서 동선을 한 번 열어 기기에 사본을 받아 둡니다(실사 작업과 같은 사용법).
+  await card.click();
+  await expect(page.getByRole('heading', { level: 1, name: customer })).toBeVisible();
 
   await page.getByRole('link', { name: '보낼함·설정' }).click();
   await page.getByRole('switch', { name: '오프라인 모의' }).check();
