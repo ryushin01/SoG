@@ -183,8 +183,8 @@ export function createWorker(openDatabase: OpenDatabase) {
           }),
         );
       }
-      // 화면 주소는 각 앱의 첫 화면으로 답합니다. 현장 실사 앱(/count/tasks/… 등)은 run_worker_first로 먼저 오고,
-      // 백오피스의 깊은 주소(/inventory/… 등)는 정적 파일이 없어 옵니다. 새로 고치거나 링크로 바로 들어와도 열립니다.
+      // 화면 주소는 각 앱의 첫 화면으로 답합니다(현장 실사 앱 /count/tasks/…, 백오피스 /inventory/… 등).
+      // 새로 고치거나 링크로 바로 들어와도 열립니다.
       const app = url.pathname.startsWith('/count/') ? '/count/' : '/';
       return secure(await env.ASSETS.fetch(new Request(new URL(app, url), request)));
     },

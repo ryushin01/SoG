@@ -31,7 +31,8 @@ export function reloadOnStaleChunk(
     if (last && last.url === target && Date.now() - last.at < RETRY_WINDOW_MS) return;
     sessionStorage.setItem(KEY, JSON.stringify({ url: target, at: Date.now() }));
   } catch {
-    // 저장소를 쓸 수 없으면 기록 없이 한 번 엽니다.
+    // 기록을 남길 수 없으면(저장 공간 가득 참 등) 되풀이를 막을 수 없으므로 자동으로 열지 않습니다.
+    return;
   }
   open(target);
 }

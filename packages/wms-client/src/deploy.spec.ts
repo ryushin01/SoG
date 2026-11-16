@@ -18,6 +18,19 @@ describe('배포 뒤 사라진 화면 조각', () => {
     expect(isChunkLoadError('chunk')).toBe(false);
   });
 
+  it('되풀이를 막는 기록을 남기지 못하면 자동으로 열지 않는다', () => {
+    const open = vi.fn();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('가득 참', 'QuotaExceededError');
+    });
+    reloadOnStaleChunk(
+      { url: '/map', error: new TypeError('Failed to fetch dynamically imported module: x') },
+      open,
+    );
+    expect(open).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it('누른 화면 주소를 새로 열고, 방금 연 주소가 또 실패하면 되풀이하지 않는다', () => {
     const open = vi.fn();
     const error = new TypeError('Failed to fetch dynamically imported module: x');

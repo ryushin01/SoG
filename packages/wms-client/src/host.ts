@@ -84,12 +84,18 @@ export class WmsHost {
    * 데모 모드로 정해졌을 때 받습니다(업무 서버·시드 약 60 kB).
    */
   server(): Promise<WmsServer> {
-    this.serverPromise ??= import('@sog/wms-server').then(async ({ createWmsServer }) => {
-      const server = await createWmsServer(this.options);
-      this.origin.set(server.origin);
-      server.subscribe((event) => this.dispatch(event));
-      return server;
-    });
+    this.serverPromise ??= import('@sog/wms-server')
+      .then(async ({ createWmsServer }) => {
+        const server = await createWmsServer(this.options);
+        this.origin.set(server.origin);
+        server.subscribe((event) => this.dispatch(event));
+        return server;
+      })
+      .catch((error: unknown) => {
+        // 조각을 못 받았거나(연결 끊김 등) 서버를 열지 못했으면 기억하지 않고, 다음 요청에서 다시 시도합니다.
+        this.serverPromise = null;
+        throw error;
+      });
     return this.serverPromise;
   }
 
