@@ -1,7 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, InjectionToken, signal } from '@angular/core';
 import type { LoginResponse, User } from '@sog/domain';
-import { issueToken, LOCAL_AUTH_SECRET } from '@sog/wms-server';
 import { firstValueFrom } from 'rxjs';
 
 /**
@@ -90,6 +89,8 @@ export async function seedTestSession(
   user: User,
   kind: 'session' | 'local' = 'session',
 ): Promise<void> {
+  // 데모 서버 패키지는 앱 첫 화면 묶음에 넣지 않도록 필요할 때 가져옵니다.
+  const { issueToken, LOCAL_AUTH_SECRET } = await import('@sog/wms-server');
   const { token, expiresAt } = await issueToken(
     LOCAL_AUTH_SECRET,
     user.id,

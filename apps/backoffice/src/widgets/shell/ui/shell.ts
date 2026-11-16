@@ -6,7 +6,8 @@ import { AuthSession, WmsHost } from '@/shared/api';
 import { ToastOutlet } from '@/shared/ui';
 import { RemoteChangeNotifier } from '@/features/notify-changes';
 import { ResetDemoButton } from '@/features/reset-demo';
-import { UserMenu } from '@/features/auth';
+// 로그인 폼(Signal Forms)과 다른 슬라이스라, 로그인한 뒤 화면의 첫 묶음에 폼 코드가 들어가지 않습니다.
+import { UserMenu } from '@/features/sign-out';
 
 const NAV = [
   { index: '00', path: '/', label: '운영 현황', exact: true },

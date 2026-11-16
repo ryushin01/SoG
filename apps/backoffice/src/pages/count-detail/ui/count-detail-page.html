@@ -93,6 +93,7 @@
     role="region"
     aria-label="실사 항목"
     [class.stale]="detail.isLoading()"
+    [attr.aria-busy]="detail.isLoading()"
   >
     <table class="table">
       <thead>

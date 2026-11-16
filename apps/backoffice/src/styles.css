@@ -4,6 +4,11 @@
  * 글자 색은 모두 바탕 대비 4.5:1 이상입니다.
  */
 
+/*
+ * 영문 제목은 Instrument Serif. 예전에는 Google Fonts에서 받았으나(외부 연결 2개, 방문자 IP가 Google로 감)
+ * 같은 글꼴 파일을 함께 내보냅니다. 라틴 확장 글자는 그 글자를 쓸 때만 받습니다(unicode-range).
+ */
+@import '@fontsource/instrument-serif/400.css';
 /* 품목 코드·로케이션·수량은 0과 O, 1과 l이 또렷한 IBM Plex Mono(라틴 글자만, 작은 파일). 한글은 운영체제 글꼴로 이어집니다. */
 @import '@fontsource/ibm-plex-mono/latin-400.css';
 @import '@fontsource/ibm-plex-mono/latin-500.css';

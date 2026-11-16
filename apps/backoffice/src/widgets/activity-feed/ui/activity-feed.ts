@@ -12,7 +12,11 @@ import { ActivityList } from '@/entities/activity';
   imports: [ActivityList, StateMessage],
   template: `
     @if (items(); as list) {
-      <sog-activity-list [items]="list" [class.stale]="resource.isLoading()" />
+      <sog-activity-list
+        [items]="list"
+        [class.stale]="resource.isLoading()"
+        [attr.aria-busy]="resource.isLoading()"
+      />
     } @else if (resource.error()) {
       <sog-state-message
         kind="error"
@@ -23,10 +27,14 @@ import { ActivityList } from '@/entities/activity';
       <sog-state-message message="활동 기록을 불러오는 중입니다." />
     }
   `,
+  // 새로 고치는 중에는 글자를 흐리게 하지 않고(명도 대비) 품목 상세 표처럼 위쪽 강조 선으로 알립니다.
   styles: `
+    sog-activity-list {
+      display: block;
+    }
     .stale {
-      opacity: 0.6;
-      transition: opacity 0.2s;
+      box-shadow: inset 0 3px 0 var(--accent);
+      cursor: progress;
     }
   `,
 })

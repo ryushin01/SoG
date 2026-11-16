@@ -25,6 +25,9 @@ const types = {
   '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
 };
@@ -54,6 +57,15 @@ createServer(async (request, response) => {
   if (!file.startsWith(root)) {
     response.writeHead(400);
     response.end();
+    return;
+  }
+  // 운영(Cloudflare, not_found_handling: none + Worker)과 같게, 없는 파일(사라진 JS 조각 등)은 404입니다.
+  if (!existsSync(file) && /\.[a-z0-9]+$/i.test(path)) {
+    response.writeHead(404, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    response.end('Not Found');
     return;
   }
   if (!existsSync(file) || statSync(file).isDirectory()) {

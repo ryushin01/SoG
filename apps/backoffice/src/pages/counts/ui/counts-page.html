@@ -30,6 +30,7 @@
     role="region"
     aria-label="실사 작업 목록"
     [class.stale]="list.isLoading()"
+    [attr.aria-busy]="list.isLoading()"
   >
     <table class="table">
       <thead>

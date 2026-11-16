@@ -1,5 +1,11 @@
 [
   {
+    "name": "백오피스 첫 화면 main(데모 서버·폼 제외)",
+    "path": "apps/backoffice/dist/browser/main-*.js",
+    "gzip": true,
+    "limit": "54 kB"
+  },
+  {
     "name": "백오피스 전체 JS",
     "path": "apps/backoffice/dist/browser/*.js",
     "gzip": true,
@@ -10,6 +16,12 @@
     "path": "apps/backoffice/dist/browser/*.css",
     "gzip": true,
     "limit": "4 kB"
+  },
+  {
+    "name": "현장 앱 첫 화면 main(데모 서버 제외)",
+    "path": "apps/count/dist/browser/main-*.js",
+    "gzip": true,
+    "limit": "14 kB"
   },
   {
     "name": "현장 앱 전체 JS",

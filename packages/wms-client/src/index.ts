@@ -7,6 +7,7 @@ import { wmsInterceptor } from './interceptor';
 import { PRESENCE_APP } from './presence';
 
 export { AUTH_STORAGE, AuthSession, seedTestSession } from './auth';
+export { isChunkLoadError, reloadOnStaleChunk } from './deploy';
 export { WMS_SERVER_OPTIONS, WmsHost, type WmsMode } from './host';
 export { idempotencyKey, ifMatch, isVersionConflict, SubmitLock, toApiError } from './http';
 export { wmsInterceptor } from './interceptor';
