@@ -7,6 +7,7 @@ import {
   InjectionToken,
   type Signal,
   signal,
+  untracked,
 } from '@angular/core';
 import { WmsHost } from './host';
 import { AuthSession } from './auth';
@@ -48,7 +49,8 @@ export class Presence {
   private readonly auth = inject(AuthSession);
   private readonly app = inject(PRESENCE_APP);
   private readonly host = inject(WmsHost);
-  private readonly tabId = Math.random().toString(36).slice(2, 10);
+  /** 이 탭의 접속 표시 ID. 로그인한 사용자가 바뀌면 새로 만듭니다(아래 생성자). */
+  private tabId = newTabId();
   private readonly channel =
     typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
   private readonly peersById = signal<ReadonlyMap<string, Peer>>(new Map());
@@ -73,6 +75,20 @@ export class Presence {
     });
     // 새로 연 탭이 다른 탭의 현재 위치를 바로 알 수 있게 물어봅니다.
     this.send({ type: 'ping' });
+    // 로그인한 사용자가 바뀌면(로그아웃, 같은 탭에서 다른 계정으로 로그인) 이전 표시를 지우고 ID를 새로 만듭니다.
+    // 서버는 같은 ID라도 다른 사용자의 항목을 덮어쓰지 않으므로, 지우지 못하고 남은 이전 사용자의 항목이
+    // 새 사용자의 신호를 막지 않게 합니다(401로 로그아웃되면 토큰이 없어 지우기를 못 보낼 수 있음).
+    let signedInAs: string | null | undefined;
+    effect(() => {
+      const userId = this.auth.user()?.id ?? null;
+      untracked(() => {
+        if (signedInAs !== undefined && signedInAs !== userId) {
+          this.send({ type: 'leave', tabId: this.tabId });
+          this.tabId = newTabId();
+        }
+        signedInAs = userId;
+      });
+    });
     // 실제 서버 모드에서는 다른 기기의 접속 정보를 서버에서 받아 옵니다.
     // 모드를 알기 전에 이 서비스가 정리될 수 있으므로, 정리된 뒤에는 폴링을 시작하지 않습니다.
     let poll: ReturnType<typeof setInterval> | undefined;
@@ -212,6 +228,10 @@ export class Presence {
       // 오프라인이면 다음 차례에 다시 받습니다.
     }
   }
+}
+
+function newTabId(): string {
+  return Math.random().toString(36).slice(2, 10);
 }
 
 function parseMessage(raw: unknown): Message | null {

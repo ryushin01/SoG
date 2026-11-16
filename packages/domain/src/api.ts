@@ -188,7 +188,9 @@ export interface ApiError {
     | 'INVALID_STATE'
     | 'UNAUTHENTICATED'
     | 'FORBIDDEN'
-    | 'NETWORK';
+    | 'NETWORK'
+    /** 서버가 처리하지 못한 오류. 내부 문구는 싣지 않고 서버 로그에만 남깁니다. */
+    | 'INTERNAL';
   message: string;
   /** VERSION_CONFLICT일 때 서버의 최신 자원 */
   current?: unknown;

@@ -3,6 +3,7 @@
   "compilerOptions": {
     "types": ["node"],
     "verbatimModuleSyntax": false,
+    "resolveJsonModule": true,
     "paths": {
       "@sog/domain": ["../domain/src/index.ts"],
       "@sog/wms-server": ["../wms-server/src/index.ts"]

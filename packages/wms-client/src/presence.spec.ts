@@ -64,6 +64,33 @@ describe('Presence', () => {
     expect(other.received.at(-1)).toEqual(expect.objectContaining({ type: 'leave' }));
   });
 
+  it('로그인한 사용자가 바뀌면 이전 표시를 지우고 다른 탭 ID로 알린다', async () => {
+    const other = otherTab();
+    await seedTestSession({ id: 'u-park', name: '박도윤', role: 'manager', team: '센터장' });
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    TestBed.createComponent(Viewer);
+    TestBed.tick();
+    await wait();
+    const here = (message: unknown) =>
+      (message as { type: string; peer?: { tabId: string; userId: string } }).peer;
+    const before = here(other.received.findLast((m) => here(m)?.userId === 'u-park'))!;
+
+    TestBed.inject(AuthSession).logout();
+    TestBed.tick();
+    await wait();
+    expect(other.received).toContainEqual({ type: 'leave', tabId: before.tabId });
+
+    await seedTestSession({ id: 'u-kim', name: '김하늘', role: 'manager', team: '재고관리팀' });
+    // 같은 탭에서 다른 계정으로 로그인한 것처럼 세션을 바꿉니다.
+    (TestBed.inject(AuthSession) as unknown as { state: { set(v: unknown): void } }).state.set(
+      JSON.parse(sessionStorage.getItem('sog:auth')!),
+    );
+    TestBed.tick();
+    await wait();
+    const after = here(other.received.findLast((m) => here(m)?.userId === 'u-kim'))!;
+    expect(after.tabId).not.toBe(before.tabId);
+  });
+
   it('다른 탭이 같은 자원을 보면 목록에 나타나고, 떠나면 사라진다', async () => {
     const presence = TestBed.inject(Presence);
     const peers = TestBed.runInInjectionContext(() => presence.peers(() => 'counts/ct-3'));

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { type ApiHandler, createApiHandler } from './api';
+import SECURITY_HEADERS from './security-headers.json';
 import { fromPgPool, type SqlDatabase, type SqlExecutor } from './sql';
 
 /**
@@ -35,6 +36,16 @@ function json(status: number, body: unknown): Response {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
   });
+}
+
+/**
+ * 보안 헤더(클릭재킹·MIME 추측 방지 등)를 붙입니다. Cloudflare가 바로 내보내는 정적 파일은 `_headers`가,
+ * Worker가 만드는 응답(API, 현장 앱 깊은 주소의 첫 화면)은 여기서 같은 값을 붙입니다.
+ */
+function secure(response: Response): Response {
+  const result = new Response(response.body, response);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) result.headers.set(name, value);
+  return result;
 }
 
 /** 지금 요청의 DB로 이어 주는 DB. 처리기·업무 서버가 붙들고 있어도 실제 연결은 요청마다 바뀝니다. */
@@ -107,7 +118,7 @@ export function createWorker(openDatabase: OpenDatabase) {
       console.error(
         '[sog] AUTH_SECRET이 없습니다. wrangler secret put AUTH_SECRET으로 넣어 주세요.',
       );
-      return json(500, { code: 'VALIDATION', message: '서버 설정(AUTH_SECRET)이 없습니다.' });
+      return json(500, { code: 'INTERNAL', message: '서버 설정(AUTH_SECRET)이 없습니다.' });
     }
     const database = closeAfterPending(openDatabase({ ...env, HYPERDRIVE: hyperdrive }));
     try {
@@ -116,22 +127,22 @@ export function createWorker(openDatabase: OpenDatabase) {
       );
     } catch (error) {
       console.error(error);
-      return json(500, { code: 'VALIDATION', message: '서버에서 문제가 생겼습니다.' });
+      return json(500, { code: 'INTERNAL', message: '서버에서 문제가 생겼습니다.' });
     } finally {
       ctx.waitUntil(database.close().catch((error: unknown) => console.error(error)));
     }
   }
 
   return {
-    fetch(request: Request, env: Env, ctx: WorkerContext): Promise<Response> {
+    async fetch(request: Request, env: Env, ctx: WorkerContext): Promise<Response> {
       const url = new URL(request.url);
-      if (url.pathname.startsWith('/api/')) return handleApi(request, env, ctx);
+      if (url.pathname.startsWith('/api/')) return secure(await handleApi(request, env, ctx));
       // 현장 실사 앱의 화면 주소(/count/tasks/… 등, 파일이 아닌 주소)는 실사 앱 첫 화면으로 답합니다.
       // 새로 고치거나 링크로 바로 들어와도 실사 앱이 열리게 합니다(wrangler.jsonc의 run_worker_first).
       if (url.pathname.startsWith('/count/')) {
-        return env.ASSETS.fetch(new Request(new URL('/count/', url), request));
+        return secure(await env.ASSETS.fetch(new Request(new URL('/count/', url), request)));
       }
-      return env.ASSETS.fetch(request);
+      return secure(await env.ASSETS.fetch(request));
     },
 
     /** 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다(wrangler.jsonc의 triggers.crons). */
