@@ -78,6 +78,7 @@
     role="region"
     aria-labelledby="inv-caption"
     [class.stale]="list.isLoading()"
+    [attr.aria-busy]="list.isLoading()"
   >
     <table class="table">
       <caption id="inv-caption" class="visually-hidden">

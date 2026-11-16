@@ -173,12 +173,20 @@ export function createWorker(openDatabase: OpenDatabase) {
     async fetch(request: Request, env: Env, ctx: WorkerContext): Promise<Response> {
       const url = new URL(request.url);
       if (url.pathname.startsWith('/api/')) return secure(await handleApi(request, env, ctx));
-      // 현장 실사 앱의 화면 주소(/count/tasks/… 등, 파일이 아닌 주소)는 실사 앱 첫 화면으로 답합니다.
-      // 새로 고치거나 링크로 바로 들어와도 실사 앱이 열리게 합니다(wrangler.jsonc의 run_worker_first).
-      if (url.pathname.startsWith('/count/')) {
-        return secure(await env.ASSETS.fetch(new Request(new URL('/count/', url), request)));
+      // 여기까지 온 나머지는 정적 파일이 없는 주소입니다(wrangler.jsonc의 not_found_handling: none).
+      // 파일처럼 생긴 주소(배포로 사라진 JS 조각 등)는 404로 답해, 앱이 화면 조각을 못 받은 것을 알게 합니다.
+      if (/\.[a-z0-9]+$/i.test(url.pathname)) {
+        return secure(
+          new Response('Not Found', {
+            status: 404,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+          }),
+        );
       }
-      return secure(await env.ASSETS.fetch(request));
+      // 화면 주소는 각 앱의 첫 화면으로 답합니다(현장 실사 앱 /count/tasks/…, 백오피스 /inventory/… 등).
+      // 새로 고치거나 링크로 바로 들어와도 열립니다.
+      const app = url.pathname.startsWith('/count/') ? '/count/' : '/';
+      return secure(await env.ASSETS.fetch(new Request(new URL(app, url), request)));
     },
 
     /** 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다(wrangler.jsonc의 triggers.crons). */

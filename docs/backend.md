@@ -100,7 +100,7 @@ Workers 무료 요청·Hyperdrive 무료 쿼리가 각각 하루 10만 건이라
 
 ## 배포
 
-- `wrangler.jsonc`: Cloudflare Worker(`sog`) 설정입니다. `site/`를 정적 자산으로 올리고, `/api/*`와 실사 앱 화면 주소만 Worker(`packages/wms-api/src/cloudflare.ts`)가 받습니다.
+- `wrangler.jsonc`: Cloudflare Worker(`sog`) 설정입니다. `site/`를 정적 자산으로 올리고, `/api/*`와 정적 파일이 없는 주소(앱 화면 주소, 사라진 파일)만 Worker(`packages/wms-api/src/cloudflare.ts`)가 받습니다.
 - `cloudflare.ts`: API 처리기와 업무 서버는 실행 환경(isolate)마다 한 번만 만들고, DB 연결만 요청마다 Hyperdrive로 엽니다. Workers는 한 요청에서 연 연결을 다른 요청에서 쓰지 못하기 때문입니다. 처리기는 AsyncLocalStorage로 지금 요청의 연결을 찾아 써서, 마이그레이션·시드 확인이 요청마다 돌지 않습니다.
 - `scripts/build-cloudflare.mjs`: 두 앱과 Storybook을 `site/`로 합치고 `_redirects`·`_headers`를 넣습니다.
 - `scripts/build-api.mjs`: 로컬 미리보기·E2E용 `/api`를 esbuild로 묶습니다(`local.mjs`: PGlite).

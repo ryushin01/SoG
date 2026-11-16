@@ -8,7 +8,7 @@
 @if (data(); as k) {
   <section class="kpis" aria-labelledby="kpi-title">
     <h2 id="kpi-title" class="visually-hidden">핵심 지표</h2>
-    <dl class="kpis__grid" [class.stale]="kpis.isLoading()">
+    <dl class="kpis__grid" [class.stale]="kpis.isLoading()" [attr.aria-busy]="kpis.isLoading()">
       <div class="kpi kpi--wide">
         <dt>재고 금액</dt>
         <dd>

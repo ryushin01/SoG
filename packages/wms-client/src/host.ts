@@ -1,6 +1,6 @@
 import { DestroyRef, inject, Injectable, InjectionToken, signal } from '@angular/core';
 import type { ChangeEvent } from '@sog/domain';
-import { createWmsServer, type WmsServer, type WmsServerOptions } from '@sog/wms-server';
+import type { WmsServer, WmsServerOptions } from '@sog/wms-server';
 import { LiveSync } from './live';
 
 export const WMS_SERVER_OPTIONS = new InjectionToken<WmsServerOptions>('WMS_SERVER_OPTIONS', {
@@ -79,13 +79,23 @@ export class WmsHost {
     if (typeof location !== 'undefined') location.reload();
   }
 
-  /** 브라우저 안 데모 서버(local 모드에서만) */
+  /**
+   * 브라우저 안 데모 서버(local 모드에서만). 운영(실제 서버 모드)에서는 받지 않도록 따로 나눠 둔 조각을
+   * 데모 모드로 정해졌을 때 받습니다(업무 서버·시드 약 60 kB).
+   */
   server(): Promise<WmsServer> {
-    this.serverPromise ??= createWmsServer(this.options).then((server) => {
-      this.origin.set(server.origin);
-      server.subscribe((event) => this.dispatch(event));
-      return server;
-    });
+    this.serverPromise ??= import('@sog/wms-server')
+      .then(async ({ createWmsServer }) => {
+        const server = await createWmsServer(this.options);
+        this.origin.set(server.origin);
+        server.subscribe((event) => this.dispatch(event));
+        return server;
+      })
+      .catch((error: unknown) => {
+        // 조각을 못 받았거나(연결 끊김 등) 서버를 열지 못했으면 기억하지 않고, 다음 요청에서 다시 시도합니다.
+        this.serverPromise = null;
+        throw error;
+      });
     return this.serverPromise;
   }
 

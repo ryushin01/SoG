@@ -26,7 +26,7 @@
   </div>
 
   <div class="layout">
-    <div class="floor" [class.stale]="overview.isLoading()">
+    <div class="floor" [class.stale]="overview.isLoading()" [attr.aria-busy]="overview.isLoading()">
       @for (zone of zones(); track zone.code) {
         <section class="zone" [attr.aria-labelledby]="'zone-' + zone.code">
           <h2 class="zone__title" [id]="'zone-' + zone.code">

@@ -19,12 +19,12 @@ jobs:
     # 어느 단계가 멈춰도 40분 안에 끝냅니다(기본값은 6시간).
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # pnpm 버전은 package.json의 packageManager를 따름
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -40,7 +40,7 @@ jobs:
       - name: Playwright 버전 확인
         id: playwright
         run: echo "version=$(pnpm --filter @sog/e2e exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
@@ -63,7 +63,7 @@ jobs:
       - run: pnpm size
       - run: pnpm lhci
         timeout-minutes: 15
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: reports
@@ -87,7 +87,7 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # 직전 푸시와 비교해 화면·서버에 영향이 없는 변경(문서·E2E·테스트·스토리·CI 설정)만 있으면 건너뜁니다.
@@ -111,9 +111,9 @@ jobs:
             fi
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.changes.outputs.deploy == 'true'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: steps.changes.outputs.deploy == 'true'
         with:
           node-version-file: .nvmrc

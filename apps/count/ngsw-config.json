@@ -21,7 +21,7 @@
       "installMode": "lazy",
       "updateMode": "prefetch",
       "resources": {
-        "files": ["/icons/**", "/**/*.(svg|png|webp|woff2)"]
+        "files": ["/icons/**", "/**/*.(svg|png|webp|woff2)", "/fonts/*.css"]
       }
     }
   ]

@@ -40,6 +40,12 @@ const headers = [
     pattern,
     '  Cache-Control: public, max-age=31536000, immutable',
   ]),
+  // 한글 글꼴 조각(pnpm fonts로 만든 public/fonts)은 이름에 해시가 없어, 쓸 때마다 재확인하지 않게 하루 캐시하고
+  // 일주일 동안은 낡은 파일을 쓰며 뒤에서 새로 받습니다. 글꼴을 다시 만들어도 하루 안에 바뀝니다.
+  ...['/fonts/*', '/count/fonts/*'].flatMap((pattern) => [
+    pattern,
+    '  Cache-Control: public, max-age=86400, stale-while-revalidate=604800',
+  ]),
 ];
 writeFileSync(join(site, '_headers'), `${headers.join('\n')}\n`);
 console.log('site/ 준비 완료: _redirects, _headers');

@@ -69,8 +69,16 @@
   background: var(--stone);
 }
 
-.stop--done .stop__head {
+/*
+ * 끝난 정류장은 흐리게 보이되 글자 대비는 지킵니다. 머리 전체를 opacity 0.7로 흐리면
+ * 번호 2.88:1, 집음 표시 3.42:1로 4.5:1에 못 미쳐, 그림만 흐리고 글자는 보조 글자색(5.25:1)으로 바꿉니다.
+ */
+.stop--done .stop__art {
   opacity: 0.7;
+}
+
+.stop--done .stop__text {
+  color: var(--ink-soft);
 }
 
 .stop__no {

@@ -127,6 +127,29 @@ describe('Cloudflare Worker 진입점', () => {
     expect(timing).toContain('desc="3 queries"');
   });
 
+  it('정적 파일이 없는 주소: 파일처럼 생긴 주소는 404, 화면 주소는 각 앱의 첫 화면', async () => {
+    const environment = env();
+    const missing = await worker.fetch(
+      new Request('https://sog.test/chunk-OLDBUILD.js'),
+      environment,
+      ctx,
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('cache-control')).toBe('no-store');
+    expect(
+      (await worker.fetch(new Request('https://sog.test/count/chunk-OLD.js'), environment, ctx))
+        .status,
+    ).toBe(404);
+    expect(environment.ASSETS.fetch).not.toHaveBeenCalled();
+
+    await worker.fetch(new Request('https://sog.test/inventory/sku-10201'), environment, ctx);
+    await worker.fetch(new Request('https://sog.test/count/tasks/ct-003'), environment, ctx);
+    const served = vi
+      .mocked(environment.ASSETS.fetch)
+      .mock.calls.map(([request]) => new URL(request.url).pathname);
+    expect(served).toEqual(['/', '/count/']);
+  });
+
   it('Worker가 내보내는 응답(API, 현장 앱 화면 주소)에도 보안 헤더를 붙인다', async () => {
     for (const response of [
       await get('/api/health'),

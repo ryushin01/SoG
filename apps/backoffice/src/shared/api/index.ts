@@ -5,6 +5,7 @@ export {
   isVersionConflict,
   Presence,
   provideWmsClient,
+  reloadOnStaleChunk,
   seedTestSession,
   SubmitLock,
   toApiError,

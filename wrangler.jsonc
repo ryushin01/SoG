@@ -12,11 +12,13 @@
     // scripts/build-cloudflare.mjs가 만든 배포 구조: / 백오피스, /count/ 현장 실사 앱, /storybook/
     "directory": "./site",
     "binding": "ASSETS",
-    // 백오피스의 깊은 주소(/inventory/… 등)는 index.html로 답합니다. 실사 앱은 Worker가 맡습니다.
-    "not_found_handling": "single-page-application",
-    // Worker는 /api와 현장 실사 앱의 화면 주소(/count/ 아래 점 없는 주소)만 받고,
-    // 나머지 파일(JS·CSS·이미지)은 Cloudflare가 바로 내보냅니다(Worker 요청 한도를 쓰지 않음).
-    "run_worker_first": ["/api/*", "/count/*", "!/count/*.*"],
+    // 정적 파일이 없는 주소는 Worker가 받습니다(cloudflare.ts). 백오피스의 깊은 주소(/inventory/… 등)는 index.html,
+    // 파일처럼 생긴 주소(배포로 사라진 JS 조각 등)는 404로 답합니다. single-page-application으로 두면 없는 JS에도
+    // index.html을 200(해시 이름이라 1년 캐시)으로 줘, 배포 전에 열어 둔 탭이 화면 조각을 못 받은 것을 알 수 없었습니다.
+    "not_found_handling": "none",
+    // Worker는 /api를 먼저 받고, 있는 파일(JS·CSS·이미지)은 Cloudflare가 바로 내보냅니다(Worker 요청 한도를 쓰지 않음).
+    // 현장 실사 앱의 화면 주소(/count/tasks/…)와 없는 파일은 정적 파일이 없어 Worker로 옵니다(not_found_handling: none).
+    "run_worker_first": ["/api/*"],
   },
   // Neon(싱가포르) 연결 풀. 쿼리 결과 캐시는 껐습니다(변경 피드·접속 표시가 늦게 보이지 않게).
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "6d27a0e9438a4f6abe37cb80b67f2d8c" }],

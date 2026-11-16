@@ -30,6 +30,7 @@
     role="region"
     aria-label="출고 지시 목록"
     [class.stale]="list.isLoading()"
+    [attr.aria-busy]="list.isLoading()"
   >
     <table class="table">
       <thead>

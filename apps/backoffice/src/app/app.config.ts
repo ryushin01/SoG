@@ -4,9 +4,10 @@ import {
   TitleStrategy,
   withComponentInputBinding,
   withInMemoryScrolling,
+  withNavigationErrorHandler,
 } from '@angular/router';
 import { provideMonitoring } from '@sog/monitoring';
-import { provideWmsClient } from '@/shared/api';
+import { provideWmsClient, reloadOnStaleChunk } from '@/shared/api';
 import { routes } from './app.routes';
 import { PageTitleStrategy } from './title-strategy';
 
@@ -22,6 +23,8 @@ export const appConfig: ApplicationConfig = {
       routes,
       withComponentInputBinding(),
       withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
+      // 배포 뒤 열어 둔 탭이 사라진 화면 조각을 못 받으면 그 주소를 새로 엽니다.
+      withNavigationErrorHandler(reloadOnStaleChunk),
     ),
     { provide: TitleStrategy, useClass: PageTitleStrategy },
     provideWmsClient({ latency: [120, 380] }, '백오피스', 'session'),
