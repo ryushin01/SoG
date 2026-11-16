@@ -65,6 +65,16 @@ export class Database {
     return promisify(tx.objectStore(store).get(id)) as Promise<T | undefined>;
   }
 
+  /** 한 트랜잭션에서 여러 문서를 읽습니다. */
+  async getMany<T extends { id: string }>(store: StoreName, ids: readonly string[]): Promise<T[]> {
+    if (ids.length === 0) return [];
+    const objects = this.db.transaction(store, 'readonly').objectStore(store);
+    const found: (T | undefined)[] = await Promise.all(
+      [...new Set(ids)].map((id) => promisify(objects.get(id) as IDBRequest<T | undefined>)),
+    );
+    return found.filter((value): value is T => value !== undefined);
+  }
+
   /** 여러 저장소의 쓰기를 한 트랜잭션으로 처리합니다. 하나라도 실패하면 모두 되돌립니다. */
   write(ops: WriteOp[]): Promise<void> {
     if (ops.length === 0) return Promise.resolve();

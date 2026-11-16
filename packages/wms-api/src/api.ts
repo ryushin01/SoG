@@ -3,7 +3,11 @@ import { createWmsServer, verifyToken, type WmsServer } from '@sog/wms-server';
 import { createPgBackend } from './pg-backend';
 import type { SqlDatabase } from './sql';
 
-const PRESENCE_TTL_SECONDS = 15;
+/**
+ * 접속 표시의 유효 시간. 화면을 조작하지 않으면 실시간 반영이 10초 간격이라(숨기면 15초),
+ * 응답이 늦어도 다른 사람의 목록에서 깜빡이지 않게 넉넉히 둡니다. 탭을 닫으면 바로 지웁니다.
+ */
+const PRESENCE_TTL_SECONDS = 30;
 const MAX_BODY_BYTES = 64 * 1024;
 
 export interface ApiHandler {
@@ -25,6 +29,56 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
 function text(value: unknown, max: number): string | null {
   return typeof value === 'string' && value.length <= max ? value : null;
 }
+
+interface PresencePeer {
+  tabId: string;
+  userId: string;
+  app: string;
+  resource: string;
+  editing: boolean;
+  detail: string;
+}
+
+/** 접속 신호 본문을 확인합니다. 사용자는 본문이 아니라 토큰으로 정합니다(다른 사람인 척 남기지 못하게). */
+function parsePeer(value: unknown, userId: string): PresencePeer | null {
+  const body = value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+  const tabId = text(body?.['tabId'], 40);
+  const resource = text(body?.['resource'], 120);
+  if (!tabId || !resource) return null;
+  return {
+    tabId,
+    userId,
+    app: text(body?.['app'], 20) ?? '',
+    resource,
+    editing: body?.['editing'] === true,
+    detail: (text(body?.['detail'], 200) ?? '').slice(0, 120),
+  };
+}
+
+/**
+ * 실시간 반영 한 번(`POST /api/live`)을 쿼리 하나로 처리합니다.
+ * 내 접속 신호를 남기고($1 탭, $2 내용 — 없으면 건너뜀), 순번 $3 뒤의 변경 100건과 지금 접속자, 마지막 순번을 함께 읽습니다.
+ * 같은 탭 ID라도 다른 사용자의 항목은 덮어쓰지 않습니다. 접속자 목록은 이 문장의 쓰기를 보지 못하지만(같은 스냅숏),
+ * 내 탭은 화면이 어차피 빼고 봅니다.
+ */
+const LIVE_SQL = `
+with here as (
+  insert into presence (tab_id, data, seen_at)
+  select $1::text, $2::jsonb, now() where $1::text is not null
+  on conflict (tab_id) do update set data = excluded.data, seen_at = now()
+  where presence.data->>'userId' = excluded.data->>'userId'
+  returning 1
+)
+select
+  (select coalesce(json_agg(json_build_object(
+      'seq', e.seq::text, 'at', e.at, 'origin', e.origin, 'by', e.by_user,
+      'topics', e.topics, 'message', e.message) order by e.seq), '[]'::json)
+     from (select seq, at, origin, by_user, topics, message from events
+           where $3::bigint is not null and seq > $3::bigint order by seq limit 100) e) as items,
+  (select coalesce(json_agg(p.data), '[]'::json) from presence p
+     where p.seen_at > now() - interval '${PRESENCE_TTL_SECONDS} seconds') as peers,
+  (select max(seq)::text from events) as last
+`;
 
 const encoder = new TextEncoder();
 
@@ -139,7 +193,7 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       );
       if (Math.random() < 0.05)
         void db
-          .query("delete from presence where seen_at < now() - interval '1 minute'")
+          .query("delete from presence where seen_at < now() - interval '2 minutes'")
           .catch(() => undefined);
       return json(200, { items: rows.map((row) => row.data) });
     }
@@ -158,17 +212,8 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       return json(204, null);
     }
     if (request.method === 'POST') {
-      const body = (await readBody(request)) as Record<string, unknown> | undefined;
-      const peer = {
-        tabId: text(body?.['tabId'], 40),
-        // 사용자는 본문이 아니라 토큰으로 정합니다(다른 사람인 척 접속 표시를 남기지 못하게).
-        userId,
-        app: text(body?.['app'], 20) ?? '',
-        resource: text(body?.['resource'], 120),
-        editing: body?.['editing'] === true,
-        detail: (text(body?.['detail'], 200) ?? '').slice(0, 120),
-      };
-      if (!peer.tabId || !peer.resource) {
+      const peer = parsePeer(await readBody(request), userId);
+      if (!peer) {
         return json(400, { code: 'VALIDATION', message: '접속 정보가 올바르지 않습니다.' });
       }
       // 같은 탭 ID라도 다른 사용자의 항목이면 덮어쓰지 않습니다(남의 표시를 자기 것으로 바꾸지 못하게).
@@ -181,6 +226,42 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       return json(204, null);
     }
     return json(405, { code: 'VALIDATION', message: '지원하지 않는 요청입니다.' });
+  }
+
+  /**
+   * 실시간 반영(`POST /api/live`): 본문 `{ after, here }`로 내 접속 신호를 남기고, 놓친 변경·지금 접속자·새 순번을
+   * 한 번에 돌려줍니다. 탭마다 변경 피드와 접속 표시를 따로 부르면 띄워 두기만 해도 하루 8만 건이라 합쳤습니다.
+   * `after`가 없으면(처음 연결) 마지막 순번만 알려 주고 그 뒤부터 이어 받게 합니다.
+   */
+  async function live(request: Request, userId: string): Promise<Response> {
+    if (request.method !== 'POST') {
+      return json(405, { code: 'VALIDATION', message: '지원하지 않는 요청입니다.' });
+    }
+    const body = (await readBody(request)) as Record<string, unknown> | undefined;
+    const raw = body?.['after'];
+    const after = typeof raw === 'string' && /^\d{1,18}$/.test(raw) ? raw : null;
+    const here = body?.['here'] ? parsePeer(body['here'], userId) : null;
+    const { rows } = await db.query<{
+      items: (Omit<ChangeEvent, 'at'> & { seq: string; at: string })[];
+      peers: unknown[];
+      last: string | null;
+    }>(LIVE_SQL, [here?.tabId ?? null, here ? JSON.stringify(here) : null, after]);
+    const row = rows[0];
+    const items = (row?.items ?? []).map((item) => ({
+      ...item,
+      at: new Date(item.at).toISOString(),
+    }));
+    // 가끔 하루 지난 변경 기록과 끊긴 접속 정보를 지웁니다.
+    if (Math.random() < 0.02)
+      void db
+        .query("delete from events where at < now() - interval '1 day'")
+        .catch(() => undefined);
+    if (Math.random() < 0.02)
+      void db
+        .query("delete from presence where seen_at < now() - interval '2 minutes'")
+        .catch(() => undefined);
+    const cursor = after === null ? (row?.last ?? '0') : (items.at(-1)?.seq ?? after);
+    return json(200, { cursor, items, peers: row?.peers ?? [] });
   }
 
   return {
@@ -202,10 +283,16 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
           await (await getServer()).reset();
           return json(200, { reset: true });
         }
-        if (url.pathname === '/api/changes' || url.pathname.startsWith('/api/presence')) {
+        // /api/changes·/api/presence는 0.7.0 전에 열어 둔 탭을 위해 남겨 둡니다(새 화면은 /api/live 하나).
+        if (
+          url.pathname === '/api/live' ||
+          url.pathname === '/api/changes' ||
+          url.pathname.startsWith('/api/presence')
+        ) {
           const userId = await authenticate(request);
           if (!userId)
             return json(401, { code: 'UNAUTHENTICATED', message: '로그인이 필요합니다.' });
+          if (url.pathname === '/api/live') return await live(request, userId);
           if (url.pathname === '/api/changes') return await changes(url);
           return await presence(request, url, userId);
         }

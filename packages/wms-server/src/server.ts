@@ -164,20 +164,29 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     `${prefix}-${now().getTime().toString(36)}${(seq++).toString(36)}${origin.slice(0, 3)}`;
 
   const reseedOnVersionChange = options.reseedOnVersionChange ?? !options.storage;
+  /**
+   * 실제 서버는 시드가 있는 것을 한 번 확인하면 이 실행 환경에서는 다시 묻지 않습니다(요청마다 쿼리 하나를 아낌).
+   * 시드는 지우지 않고 덮어쓰기만 하므로(초기화도 다시 채움) 한 번 있으면 계속 있습니다.
+   * 브라우저 데모는 다른 탭이 새 시드 버전으로 바꿀 수 있어 매번 확인합니다(IndexedDB라 빠름).
+   */
+  let seedKnown = false;
 
   async function ensureSeed(): Promise<void> {
+    if (seedKnown) return;
     const seeded = async () => {
       const meta = await db.get<{ version?: number }>('meta', SEED_KEY);
       return reseedOnVersionChange
         ? meta?.version === SEED_VERSION
         : meta !== undefined && meta !== null;
     };
-    if (await seeded()) return;
-    await lock(async () => {
-      // 다른 탭이 잠금을 먼저 잡고 시드를 넣었을 수 있습니다.
-      if (await seeded()) return;
-      await writeSeed();
-    });
+    if (!(await seeded())) {
+      await lock(async () => {
+        // 다른 탭이 잠금을 먼저 잡고 시드를 넣었을 수 있습니다.
+        if (await seeded()) return;
+        await writeSeed();
+      });
+    }
+    if (!reseedOnVersionChange) seedKnown = true;
   }
 
   async function writeSeed(): Promise<void> {
@@ -191,13 +200,32 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       put: { id: SEED_KEY, version: SEED_VERSION, at: now().toISOString() } as { id: string },
     });
     await db.write(ops);
+    usersCache = null;
+  }
+
+  /**
+   * 사용자 목록은 시드로만 바뀌므로 잠깐 기억합니다. 모든 요청이 로그인한 사용자를 찾으려고 읽어서,
+   * 실제 서버의 쿼리 수(Hyperdrive 무료 한도)를 요청마다 하나씩 아낍니다.
+   */
+  let usersCache: { at: number; users: Promise<User[]> } | null = null;
+  function cachedUsers(): Promise<User[]> {
+    const at = Date.now();
+    if (!usersCache || at - usersCache.at > USERS_CACHE_MS) {
+      const users = db.all<User>('users');
+      usersCache = { at, users };
+      // 읽기에 실패하면 기억하지 않고 다음 요청에서 다시 읽습니다.
+      users.catch(() => {
+        if (usersCache?.users === users) usersCache = null;
+      });
+    }
+    return usersCache.users;
   }
 
   await ensureSeed();
 
   // ---------- 읽기 도우미 ----------
   const load = {
-    users: () => db.all<User>('users'),
+    users: cachedUsers,
     locations: () => db.all<Location>('locations'),
     skus: () => db.all<Sku>('skus'),
     stocks: () => db.all<StockLevel>('stocks'),
@@ -409,13 +437,24 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       const ops = [...result.ops];
       // 품목·재고·실사 항목이 바뀌면 이전 문서와 비교해 변경 이력을 남깁니다(어느 업무로 바뀌었든 빠짐없이).
       const reason = result.activity[0]?.message ?? '';
-      const locations = await load.locations();
-      for (const op of result.ops) {
-        if (!('put' in op)) continue;
-        const kind = STORE_KIND[op.store];
-        if (!kind) continue;
+      const tracked = result.ops.filter(
+        (op): op is Extract<WriteOp, { put: { id: string } }> =>
+          'put' in op && STORE_KIND[op.store] !== undefined,
+      );
+      // 이전 문서는 저장소마다 한 번에 읽습니다. 하나씩 읽으면 실사 승인처럼 문서가 많은 쓰기가
+      // 모든 쓰기를 한 줄로 세우는 잠금을 그만큼 오래 붙잡습니다.
+      const previous = new Map<string, Record<string, unknown>>();
+      for (const store of new Set(tracked.map((op) => op.store))) {
+        const ids = tracked.filter((op) => op.store === store).map((op) => op.put.id);
+        for (const doc of await db.getMany<{ id: string }>(store, ids)) {
+          previous.set(`${store}/${doc.id}`, doc as Record<string, unknown>);
+        }
+      }
+      const locations = tracked.some((op) => op.store !== 'skus') ? await load.locations() : [];
+      for (const op of tracked) {
+        const kind = STORE_KIND[op.store]!;
         const after = op.put as Record<string, unknown> & { id: string; version?: number };
-        const before = await db.get<Record<string, unknown>>(op.store, after.id);
+        const before = previous.get(`${op.store}/${after.id}`);
         const changes = diff(kind, before, after);
         if (changes.length === 0) continue;
         const skuId = kind === 'sku' ? after.id : String(after['skuId']);
@@ -2046,6 +2085,9 @@ function safeDecode(value: string): string | null {
 
 /** 목록 개수 상한. 화면은 최대 100건(활동 기록)을 씁니다. */
 const MAX_LIST_LIMIT = 200;
+
+/** 사용자 목록을 기억하는 시간 */
+const USERS_CACHE_MS = 60_000;
 
 const SKU_SORTS: readonly SkuSort[] = ['code', 'name', 'onHand', 'available', 'value', 'updatedAt'];
 

@@ -119,6 +119,14 @@ describe('Cloudflare Worker 진입점', () => {
     expect(opened).toBe(0);
   });
 
+  it('API 응답에 서버 처리 시간과 DB 쿼리 수(Server-Timing)를 싣는다', async () => {
+    await get('/api/skus?size=1');
+    const timing = (await get('/api/skus?size=1')).headers.get('server-timing') ?? '';
+    expect(timing).toMatch(/^app;dur=[\d.]+, db;dur=[\d.]+;desc="\d+ queries"$/);
+    // 시드 확인·사용자 목록은 실행 환경마다 한 번이라, 두 번째 목록 요청은 쿼리 3개(품목·재고·로케이션)입니다.
+    expect(timing).toContain('desc="3 queries"');
+  });
+
   it('Worker가 내보내는 응답(API, 현장 앱 화면 주소)에도 보안 헤더를 붙인다', async () => {
     for (const response of [
       await get('/api/health'),

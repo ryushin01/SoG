@@ -54,7 +54,8 @@ export class TaskPage {
 
   protected readonly detail = resource({
     params: () => this.taskId(),
-    loader: ({ params }) => this.repo.detail(params),
+    // 기기 사본을 먼저 보여 주고 새로 받습니다.
+    stream: ({ params }) => this.repo.watchDetail(params),
   });
 
   protected readonly rows = computed(() =>

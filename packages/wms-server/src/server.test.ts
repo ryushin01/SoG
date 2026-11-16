@@ -746,6 +746,7 @@ describe('입력 검증과 오류 응답', () => {
   it('처리하지 못한 오류는 내부 문구 없이 INTERNAL로 답하고 서버 로그에 남긴다', async () => {
     const failing: Storage = {
       get: async () => ({ id: 'seed', version: 3 }) as never,
+      getMany: async () => [],
       all: async () => {
         throw new Error('relation "docs" does not exist');
       },

@@ -151,20 +151,43 @@ describe('Presence', () => {
     return (mode: 'remote' | 'local') => resolve(mode);
   }
 
-  it('서버 모드면 다른 기기의 접속 정보를 받아 온다', async () => {
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ items: [] })));
+  it('서버 모드면 실시간 반영 한 요청으로 다른 기기의 접속 정보를 받아 온다', async () => {
+    const fetchSpy = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            cursor: '7',
+            items: [],
+            peers: [
+              {
+                tabId: 'far',
+                userId: 'u-lee',
+                app: '현장 앱',
+                resource: 'skus/sku-1',
+                editing: false,
+                detail: '',
+              },
+            ],
+          }),
+        ),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     const answer = await slowHost();
-    TestBed.inject(Presence);
+    const presence = TestBed.inject(Presence);
+    const peers = TestBed.runInInjectionContext(() => presence.peers(() => 'skus/sku-1'));
     answer('remote');
-    await wait();
+    await vi.waitFor(() => expect(peers().map((peer) => peer.tabId)).toEqual(['far']));
     expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/presence',
+      '/api/live',
       expect.objectContaining({
+        method: 'POST',
         cache: 'no-store',
-        headers: { Authorization: expect.stringMatching(/^Bearer /) },
+        headers: expect.objectContaining({ Authorization: expect.stringMatching(/^Bearer /) }),
       }),
     );
+    // 따로 부르던 접속 표시 받기(/api/presence)는 더 부르지 않습니다.
+    expect(fetchSpy.mock.calls.some(([url]) => url === '/api/presence')).toBe(false);
+    TestBed.resetTestingModule();
     vi.unstubAllGlobals();
   });
 

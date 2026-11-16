@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import type { Movement, Page, SkuDetail, SkuSummary } from '@sog/domain';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { issueToken } from '@sog/wms-server';
 import { type ApiHandler, createApiHandler } from './api';
 
@@ -245,6 +245,80 @@ describe('실제 서버(Postgres)', () => {
       }),
     );
     expect(allowed.status).toBe(200);
+  });
+
+  it('실시간 반영 한 번(쿼리 하나)에 접속 신호를 남기고 놓친 변경·접속자·새 순번을 받는다', async () => {
+    type Live = {
+      cursor: string;
+      items: { seq: string; topics: string[]; by: string; at: string }[];
+      peers: { tabId: string; userId: string; editing: boolean }[];
+    };
+    const here = (tabId: string, resource: string) => ({
+      tabId,
+      app: '백오피스',
+      resource,
+      editing: true,
+      detail: '',
+    });
+    const first = await call<Live>('POST', '/api/live', {
+      body: { after: null, here: here('t1', 'skus/sku-10201') },
+    });
+    expect(first.status).toBe(200);
+    expect(first.body.items).toEqual([]);
+
+    const sku = await call<SkuDetail>('GET', '/api/skus/sku-10201', { user: 'u-park' });
+    await call('PATCH', '/api/skus/sku-10201', {
+      body: { safetyStock: sku.body.sku.safetyStock + 1 },
+      ifMatch: sku.body.sku.version,
+      user: 'u-park',
+    });
+
+    const second = await call<Live>('POST', '/api/live', {
+      user: 'u-park',
+      body: { after: first.body.cursor, here: here('t2', 'skus/sku-10201') },
+    });
+    expect(
+      second.body.items.map((item) => [item.by, item.topics.includes('skus/sku-10201')]),
+    ).toEqual([['u-park', true]]);
+    expect(second.body.items[0]!.at).toMatch(/Z$/);
+    expect(second.body.peers).toContainEqual(
+      expect.objectContaining({ tabId: 't1', userId: 'u-kim', editing: true }),
+    );
+    expect(Number(second.body.cursor)).toBeGreaterThan(Number(first.body.cursor));
+
+    // 잘못된 순번은 처음 연결처럼 마지막 순번만 알려 줍니다.
+    const odd = await call<Live>('POST', '/api/live', { body: { after: '1; drop table events' } });
+    expect([odd.body.items, odd.body.cursor]).toEqual([[], second.body.cursor]);
+    expect((await call('POST', '/api/live', { user: null, body: {} })).status).toBe(401);
+  });
+
+  it('실시간 반영은 쿼리 하나로 처리한다', async () => {
+    const pglite = await PGlite.create();
+    let queries = 0;
+    const counted = fromPglite(pglite);
+    const counting = await createApiHandler(
+      { ...counted, query: (text, params) => (queries++, counted.query(text, params)) },
+      { authSecret: SECRET },
+    );
+    const { token } = await issueToken(SECRET, 'u-kim', Math.floor(Date.now() / 1000));
+    const send = () =>
+      counting.handle(
+        new Request('https://sog.test/api/live', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            after: '0',
+            here: { tabId: 't9', app: '백오피스', resource: 'skus/sku-1', editing: false },
+          }),
+        }),
+      );
+    await send();
+    queries = 0;
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    expect((await send()).status).toBe(200);
+    expect(queries).toBe(1);
+    random.mockRestore();
+    await counting.close();
   });
 
   it('JSON이 아닌 본문은 400', async () => {

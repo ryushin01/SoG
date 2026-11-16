@@ -7,6 +7,8 @@ import type { StoreName, WriteOp } from './idb';
  */
 export interface Storage {
   get<T>(store: StoreName, id: string): Promise<T | undefined>;
+  /** 여러 문서를 한 번에 읽습니다(Postgres는 쿼리 하나). 없는 ID는 빠지고 순서는 정하지 않습니다. */
+  getMany<T extends { id: string }>(store: StoreName, ids: readonly string[]): Promise<T[]>;
   all<T>(store: StoreName): Promise<T[]>;
   write(ops: WriteOp[]): Promise<void>;
   close(): void;

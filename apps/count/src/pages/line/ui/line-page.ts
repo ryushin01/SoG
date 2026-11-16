@@ -56,7 +56,8 @@ export class LinePage {
 
   protected readonly detail = resource({
     params: () => this.taskId(),
-    loader: ({ params }) => this.repo.detail(params),
+    // 작업 화면에서 받은 사본을 바로 보여 주고 새로 받습니다(품목으로 갈 때마다 서버 왕복을 기다리지 않음).
+    stream: ({ params }) => this.repo.watchDetail(params),
   });
   protected readonly task = computed(
     () => (this.detail.hasValue() ? this.detail.value() : undefined)?.data.task ?? null,
