@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
   await resetDemo(page);
 });
 
-test('백오피스: 로그인·대시보드·재고·도면·실사 검토', async ({ page }) => {
+test('백오피스: 로그인·대시보드·재고·도면·활동 기록·실사 검토', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('radio', { name: /김하늘/ }).check();
   await page.getByLabel('비밀번호').fill(DEMO_PASSWORD);
@@ -37,9 +37,21 @@ test('백오피스: 로그인·대시보드·재고·도면·실사 검토', asy
   await expect(page.getByRole('heading', { level: 1, name: '재고' })).toBeVisible();
   await shoot(page, 'backoffice-inventory');
 
-  await page.goto('/map?loc=loc-A-02-01-1');
+  // 도면: 품목 찾기로 품목이 있는 칸을 표시하고, 그중 한 칸을 고른 모습
+  await page.goto('/map?sku=sku-10201');
   await expect(page.getByRole('heading', { level: 1, name: '창고 도면' })).toBeVisible();
+  await page
+    .getByRole('button', { name: /찾는 품목 \d+개/ })
+    .first()
+    .click();
+  await expect(page.getByRole('heading', { level: 2, name: /^[A-D]-\d/ })).toBeVisible();
   await shoot(page, 'backoffice-map');
+
+  // 활동 기록: 출고 지시만 거른 모습
+  await page.goto('/activity?kind=order');
+  await expect(page.getByRole('heading', { level: 1, name: '활동 기록' })).toBeVisible();
+  await expect(page.getByLabel('종류')).toHaveValue('order');
+  await shoot(page, 'backoffice-activity');
 
   await page.goto('/counts');
   await page

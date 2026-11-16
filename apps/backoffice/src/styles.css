@@ -286,6 +286,19 @@ textarea {
   background: var(--surface-raised);
 }
 
+/*
+ * 셀렉트는 화살표와 칸 오른쪽 끝 사이를 글자와 칸 왼쪽 끝 사이(테두리 + 안쪽 여백 0.75rem)와 같게 둡니다.
+ * 브라우저 기본 화살표는 위치를 맞출 수 없어 직접 그린 화살표(배경, 꾸밈)를 쓰고 오른쪽 여백을 그만큼 넓힙니다.
+ */
+.select {
+  appearance: none;
+  padding-inline-end: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23262933' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem 0.5rem;
+}
+
 .textarea {
   min-height: 5rem;
   resize: vertical;
