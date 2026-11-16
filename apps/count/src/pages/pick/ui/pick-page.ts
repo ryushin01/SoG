@@ -35,9 +35,10 @@ export class PickPage {
   protected readonly open = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
 
+  // 연결 상태도 조건에 넣어, 다시 연결되면 바로 새로 받습니다(오프라인 사본 안내가 남지 않게).
   protected readonly detail = resource({
-    params: () => this.orderId(),
-    loader: ({ params }) => this.api.detail(params),
+    params: () => ({ id: this.orderId(), online: this.network.online() }),
+    loader: ({ params }) => this.api.detail(params.id),
   });
   protected readonly copy = computed(() =>
     this.detail.hasValue() ? this.detail.value() : undefined,

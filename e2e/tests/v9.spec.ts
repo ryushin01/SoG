@@ -77,3 +77,20 @@ test('피킹 목록과 동선은 받은 사본으로 오프라인에서도 보�
   await expect(page.getByText(/받은 동선을 보여 줍니다/)).toBeVisible();
   await expectAccessibleLayout(page);
 });
+
+test('피킹 목록은 연결이 끊기면 받은 사본으로, 다시 연결되면 바로 새로 받는다', async ({
+  page,
+  context,
+}) => {
+  await loginCount(page);
+  await page.getByRole('link', { name: '피킹' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '피킹' })).toBeVisible();
+  await expect(page.locator('a.card[href*="/picks/"]').first()).toBeVisible();
+  const offline = page.getByText(/받은 목록을 보여 줍니다/);
+
+  await context.setOffline(true);
+  await expect(offline).toBeVisible();
+  await context.setOffline(false);
+  await expect(offline).toHaveCount(0);
+  await expect(page.locator('a.card[href*="/picks/"]').first()).toBeVisible();
+});

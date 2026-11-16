@@ -121,10 +121,14 @@ export class PicksPage {
   protected readonly network = inject(NetworkState);
   private readonly api = inject(PickApi);
   protected readonly label = ORDER_STATUS_LABEL;
-  // 오프라인이면 기기에 받아 둔 목록을 보여 줍니다(받은 적이 없으면 오류로 안내).
+  // 오프라인이면 기기에 받은 목록을 보여 줍니다(받은 적이 없으면 오류로 안내).
+  // 연결 상태도 조건에 넣어, 다시 연결되면 바로 새로 받습니다(오프라인 안내가 남지 않게).
   protected readonly orders = resource({
-    params: () => this.session.operatorId() ?? undefined,
-    loader: ({ params }) => this.api.list(params),
+    params: () => {
+      const id = this.session.operatorId();
+      return id ? { id, online: this.network.online() } : undefined;
+    },
+    loader: ({ params }) => this.api.list(params.id),
   });
 
   constructor() {
