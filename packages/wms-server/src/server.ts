@@ -691,10 +691,17 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       '/api/activity',
       async (ctx) => {
         const limit = intParam(ctx.query.get('limit'), 20, 1, MAX_LIST_LIMIT);
-        const items = (await db.all<Activity>('activity'))
-          .sort((a, b) => b.at.localeCompare(a.at))
-          .slice(0, limit);
-        return json(200, { items });
+        // 종류는 묶음으로 거릅니다: count는 count.created·count.line …, order는 order.* 모두.
+        const kind = ctx.query.get('kind');
+        const by = ctx.query.get('by');
+        const matched = (await db.all<Activity>('activity'))
+          .filter(
+            (item) =>
+              (!kind || item.kind === kind || item.kind.startsWith(`${kind}.`)) &&
+              (!by || item.by === by),
+          )
+          .sort((a, b) => b.at.localeCompare(a.at));
+        return json(200, { items: matched.slice(0, limit), total: matched.length });
       },
     ],
     [

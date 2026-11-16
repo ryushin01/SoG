@@ -693,6 +693,38 @@ describe('변경 이력', () => {
   });
 });
 
+describe('활동 기록 필터', () => {
+  it('종류 묶음과 사람으로 거르고 전체 건수를 알려 준다', async () => {
+    const [server] = await tabs(1);
+    const { stock } = await firstStock(server!);
+    for (const user of ['u-kim', 'u-park']) {
+      await call(server!, 'POST', '/api/movements', {
+        user,
+        body: {
+          type: 'shipment',
+          skuId: stock.skuId,
+          fromLocationId: stock.locationId,
+          qty: 1,
+          reason: '필터 확인',
+        },
+      });
+    }
+    const page = (url: string) =>
+      call(server!, 'GET', url).then(
+        (response) => response.body as { items: { kind: string; by: string }[]; total: number },
+      );
+    const counts = await page('/api/activity?kind=count&limit=200');
+    expect(counts.items.length).toBeGreaterThan(0);
+    expect(counts.items.every((item) => item.kind.startsWith('count.'))).toBe(true);
+    const mine = await page('/api/activity?kind=movement&by=u-park&limit=1');
+    expect(mine.items.map((item) => [item.kind, item.by])).toEqual([['movement', 'u-park']]);
+    expect(mine.total).toBeGreaterThanOrEqual(1);
+    const all = await page('/api/activity?limit=5');
+    expect(all.items.length).toBe(5);
+    expect(all.total).toBeGreaterThan(5);
+  });
+});
+
 describe('입력 검증과 오류 응답', () => {
   it('다른 작업의 항목에는 재실사를 요청할 수 없다(승인된 작업의 항목이 바뀌지 않음)', async () => {
     const [server] = await tabs(1);

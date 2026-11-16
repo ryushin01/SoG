@@ -101,6 +101,9 @@
         </tbody>
       </table>
     </div>
+    @if (d.stocks.length) {
+      <a class="map-link" routerLink="/map" [queryParams]="{ sku: d.sku.id }">도면에서 보기</a>
+    }
   </section>
 
   <section class="block" aria-labelledby="history-title">

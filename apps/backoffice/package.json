@@ -1,6 +1,6 @@
 {
   "name": "@sog/backoffice",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "scripts": {
     "dev": "ng serve --port 4200",
     "build": "ng build --define \"SENTRY_DSN='${SENTRY_DSN:-}'\"",

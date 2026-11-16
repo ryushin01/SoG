@@ -5,6 +5,22 @@
   description="구역·통로·랙·단을 실제 배치대로 펼쳤습니다. 칸의 막대는 보유 수량이고, 칸을 고르면 그 로케이션의 품목이 보입니다."
 />
 
+<search class="finder">
+  <h2 class="visually-hidden">도면에서 품목 찾기</h2>
+  <div class="field finder__field">
+    <label class="field__label" for="map-sku">품목 찾기</label>
+    <select id="map-sku" class="select" (change)="findSku($event)">
+      <option value="" [selected]="!skuId()">고르지 않음</option>
+      @for (option of skuOptions.hasValue() ? skuOptions.value().items : []; track option.id) {
+        <option [value]="option.id" [selected]="skuId() === option.id">
+          {{ option.name }} · {{ option.code }}
+        </option>
+      }
+    </select>
+  </div>
+  <p class="finder__result" role="status">{{ foundText() }}</p>
+</search>
+
 @if (items(); as all) {
   <div class="legend" aria-label="범례">
     <span class="legend__item"
@@ -23,6 +39,12 @@
       ><span class="swatch swatch--empty" aria-hidden="true"></span>비어 있음
       {{ summary().empty }}칸</span
     >
+    @if (skuId()) {
+      <span class="legend__item"
+        ><span class="swatch swatch--found" aria-hidden="true"></span>찾는 품목
+        {{ foundAt().size }}칸</span
+      >
+    }
   </div>
 
   <div class="layout">
@@ -55,6 +77,7 @@
                         [class.cell--alert]="cell.status === 'low' || cell.status === 'out'"
                         [class.cell--count]="cell.countingTask"
                         [class.cell--on]="selectedId() === cell.location.id"
+                        [class.cell--found]="foundAt().has(cell.location.id)"
                         [attr.aria-pressed]="selectedId() === cell.location.id"
                         (click)="select(cell.location.id)"
                       >

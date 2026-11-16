@@ -9,7 +9,12 @@
     @if (notice(); as message) {
       <p class="alert" role="alert">{{ message }}</p>
     }
-    @if (!network.online()) {
+    @if (copy()?.fromCache) {
+      <p class="offline" role="status">
+        오프라인입니다. {{ copy()!.savedAt | ago }} 받은 동선을 보여 줍니다. 집음 확인은 연결되면
+        저장할 수 있습니다.
+      </p>
+    } @else if (!network.online()) {
       <p class="offline" role="status">오프라인입니다. 피킹은 연결되면 저장할 수 있습니다.</p>
     }
     @if (d.order.status === 'picked') {

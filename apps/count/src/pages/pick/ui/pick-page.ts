@@ -12,6 +12,7 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { ORDER_STATUS_LABEL, skuArtUrl } from '@sog/domain';
 import { NetworkState, Presence, WmsHost } from '@/shared/api';
+import { AgoPipe } from '@/shared/lib';
 import { StateMessage } from '@/shared/ui';
 import { Progress } from '@/entities/count-task';
 import { PickApi } from '@/entities/pick-order';
@@ -22,7 +23,7 @@ import { PeerNotice } from '@/features/show-presence';
 @Component({
   selector: 'cnt-pick-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, StateMessage, Progress, PickForm, PeerNotice],
+  imports: [RouterLink, AgoPipe, StateMessage, Progress, PickForm, PeerNotice],
   templateUrl: './pick-page.html',
   styleUrl: './pick-page.css',
 })
@@ -38,9 +39,10 @@ export class PickPage {
     params: () => this.orderId(),
     loader: ({ params }) => this.api.detail(params),
   });
-  protected readonly data = computed(() =>
+  protected readonly copy = computed(() =>
     this.detail.hasValue() ? this.detail.value() : undefined,
   );
+  protected readonly data = computed(() => this.copy()?.data);
   protected readonly route = computed(() =>
     (this.data()?.route ?? []).map((item) => ({ ...item, art: skuArtUrl(item.sku) })),
   );

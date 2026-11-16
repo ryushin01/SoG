@@ -198,7 +198,12 @@ export interface ApiError {
 
 export interface ActivityPage {
   items: Activity[];
+  /** 조건(종류·사람)에 맞는 전체 건수. 더 받을 것이 있는지 봅니다. */
+  total?: number;
 }
+
+/** 활동 기록을 거르는 종류 묶음(`/api/activity?kind=`) */
+export type ActivityGroup = 'movement' | 'count' | 'order' | 'sku' | 'conflict';
 
 /** 다른 탭(사용자)이 데이터를 바꾸면 BroadcastChannel로 퍼지는 알림 */
 export interface ChangeEvent {
