@@ -1,0 +1,79 @@
+<sog-page-header
+  index="05"
+  label="Activity"
+  heading="활동 기록"
+  description="입출고, 실사, 정보 수정, 막아 낸 동시 수정 충돌까지 모든 변경을 시간순으로 남깁니다."
+/>
+
+<search class="filters">
+  <h2 class="visually-hidden">활동 기록 거르기</h2>
+  <div class="field">
+    <label class="field__label" for="act-kind">종류</label>
+    <select id="act-kind" class="select" (change)="kindFilter.set(value($event))">
+      <option value="" [selected]="!kindFilter()">전체</option>
+      @for (group of groups; track group.value) {
+        <option [value]="group.value" [selected]="kindFilter() === group.value">
+          {{ group.label }}
+        </option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label class="field__label" for="act-by">사람</label>
+    <select id="act-by" class="select" (change)="byFilter.set(value($event))">
+      <option value="" [selected]="!byFilter()">전체</option>
+      @for (user of session.users(); track user.id) {
+        <option [value]="user.id" [selected]="byFilter() === user.id">
+          {{ user.name }} · {{ user.team }}
+        </option>
+      }
+    </select>
+  </div>
+  @if (filtered()) {
+    <button type="button" class="btn btn--quiet filters__reset" (click)="reset()">
+      필터 지우기
+    </button>
+  }
+</search>
+
+@if (rows(); as page) {
+  @if (list.error()) {
+    <sog-state-message
+      kind="error"
+      message="활동 기록을 새로 불러오지 못했습니다. 이전 결과입니다."
+      (retry)="list.reload()"
+    />
+  }
+  <p class="count" role="status">
+    {{ total() }}건 중 {{ page.items.length }}건
+    @if (list.isLoading()) {
+      <span class="muted"> · 갱신 중</span>
+    }
+  </p>
+  <sog-activity-list
+    [items]="page.items"
+    [class.stale]="list.isLoading() || !!list.error()"
+    [attr.aria-busy]="list.isLoading()"
+  />
+  @if (more()) {
+    <button
+      type="button"
+      class="btn more"
+      [disabled]="list.isLoading()"
+      (click)="pages.set(pages() + 1)"
+    >
+      더 보기
+    </button>
+  }
+  @if (capped()) {
+    <p class="muted more">최근 200건까지 보입니다. 종류나 사람을 골라 보세요.</p>
+  }
+} @else if (list.error()) {
+  <sog-state-message
+    kind="error"
+    message="활동 기록을 불러오지 못했습니다."
+    (retry)="list.reload()"
+  />
+} @else {
+  <sog-state-message message="활동 기록을 불러오는 중입니다." />
+}

@@ -1,1 +1,1 @@
-export { PickApi } from './api/pick-api';
+export { PickApi, type PickCopy } from './api/pick-api';

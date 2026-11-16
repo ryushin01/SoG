@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, resource } from '@angular/c
 import { RouterLink } from '@angular/router';
 import { ORDER_STATUS_LABEL } from '@sog/domain';
 import { NetworkState, WmsHost } from '@/shared/api';
-import { DayPipe } from '@/shared/lib';
+import { AgoPipe, DayPipe } from '@/shared/lib';
 import { StateMessage } from '@/shared/ui';
 import { Progress } from '@/entities/count-task';
 import { OperatorSession } from '@/entities/operator';
@@ -11,19 +11,20 @@ import { PickApi } from '@/entities/pick-order';
 @Component({
   selector: 'cnt-picks-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, DayPipe, StateMessage, Progress],
+  imports: [RouterLink, AgoPipe, DayPipe, StateMessage, Progress],
   template: `
     <div class="page">
       <p class="caption">{{ session.operator()?.team }}</p>
       <h1 id="page-title" tabindex="-1" class="title">피킹</h1>
-      @if (!network.online()) {
-        <p class="offline" role="status">
-          피킹은 재고 예약과 맞물려 연결이 필요합니다. 연결되면 목록이 보입니다.
-        </p>
-      }
-      @if (orders.hasValue()) {
+      @if (orders.hasValue() ? orders.value() : undefined; as result) {
+        @if (result.fromCache) {
+          <p class="offline" role="status">
+            오프라인입니다. {{ result.savedAt | ago }} 받은 목록을 보여 줍니다. 집음 확인은 연결되면
+            저장할 수 있습니다.
+          </p>
+        }
         <ul class="cards">
-          @for (order of orders.value(); track order.id) {
+          @for (order of result.data; track order.id) {
             <li>
               <a class="card" [routerLink]="['/picks', order.id]">
                 <span class="card__top">
@@ -53,7 +54,11 @@ import { PickApi } from '@/entities/pick-order';
       } @else if (orders.error()) {
         <cnt-state-message
           kind="error"
-          message="출고 지시를 불러오지 못했습니다."
+          [message]="
+            network.online()
+              ? '출고 지시를 불러오지 못했습니다.'
+              : '오프라인이고 기기에 받은 출고 지시가 없습니다. 처음 한 번은 연결이 필요합니다.'
+          "
           (retry)="orders.reload()"
         />
       } @else {
@@ -116,9 +121,14 @@ export class PicksPage {
   protected readonly network = inject(NetworkState);
   private readonly api = inject(PickApi);
   protected readonly label = ORDER_STATUS_LABEL;
+  // 오프라인이면 기기에 받은 목록을 보여 줍니다(받은 적이 없으면 오류로 안내).
+  // 연결 상태도 조건에 넣어, 다시 연결되면 바로 새로 받습니다(오프라인 안내가 남지 않게).
   protected readonly orders = resource({
-    params: () => (this.network.online() ? (this.session.operatorId() ?? undefined) : undefined),
-    loader: ({ params }) => this.api.list(params),
+    params: () => {
+      const id = this.session.operatorId();
+      return id ? { id, online: this.network.online() } : undefined;
+    },
+    loader: ({ params }) => this.api.list(params.id),
   });
 
   constructor() {

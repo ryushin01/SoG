@@ -12,6 +12,7 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { ORDER_STATUS_LABEL, skuArtUrl } from '@sog/domain';
 import { NetworkState, Presence, WmsHost } from '@/shared/api';
+import { AgoPipe } from '@/shared/lib';
 import { StateMessage } from '@/shared/ui';
 import { Progress } from '@/entities/count-task';
 import { PickApi } from '@/entities/pick-order';
@@ -22,7 +23,7 @@ import { PeerNotice } from '@/features/show-presence';
 @Component({
   selector: 'cnt-pick-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, StateMessage, Progress, PickForm, PeerNotice],
+  imports: [RouterLink, AgoPipe, StateMessage, Progress, PickForm, PeerNotice],
   templateUrl: './pick-page.html',
   styleUrl: './pick-page.css',
 })
@@ -34,13 +35,15 @@ export class PickPage {
   protected readonly open = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
 
+  // 연결 상태도 조건에 넣어, 다시 연결되면 바로 새로 받습니다(오프라인 사본 안내가 남지 않게).
   protected readonly detail = resource({
-    params: () => this.orderId(),
-    loader: ({ params }) => this.api.detail(params),
+    params: () => ({ id: this.orderId(), online: this.network.online() }),
+    loader: ({ params }) => this.api.detail(params.id),
   });
-  protected readonly data = computed(() =>
+  protected readonly copy = computed(() =>
     this.detail.hasValue() ? this.detail.value() : undefined,
   );
+  protected readonly data = computed(() => this.copy()?.data);
   protected readonly route = computed(() =>
     (this.data()?.route ?? []).map((item) => ({ ...item, art: skuArtUrl(item.sku) })),
   );
