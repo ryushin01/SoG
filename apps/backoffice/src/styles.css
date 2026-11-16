@@ -299,6 +299,15 @@ textarea {
   background-size: 0.75rem 0.5rem;
 }
 
+/* 고대비(강제 색) 모드에서는 그린 화살표 색이 바뀌지 않아 배경에 묻히므로 브라우저 기본 화살표로 돌립니다. */
+@media (forced-colors: active) {
+  .select {
+    appearance: auto;
+    padding-inline-end: 0.75rem;
+    background-image: none;
+  }
+}
+
 .textarea {
   min-height: 5rem;
   resize: vertical;
