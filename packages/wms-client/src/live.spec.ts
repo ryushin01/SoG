@@ -105,6 +105,21 @@ describe('LiveSync', () => {
     expect(peers.at(-1)).toEqual([{ tabId: 'p1' }]);
   });
 
+  it('요청이 멈추면 기한(응답 본문 포함)이 지나 끊고 다음 차례에 다시 보낸다', async () => {
+    const signals: AbortSignal[] = [];
+    const fetchSpy = vi.fn((_url: string, init?: RequestInit) => {
+      signals.push(init!.signal!);
+      return new Promise<Response>(() => undefined);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    await signedIn();
+    TestBed.inject(LiveSync).start();
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+    // fetch 하나마다 기한이 걸린 신호를 넘깁니다(멈춘 요청이 반복을 영영 막지 않게).
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    expect(signals[0]!.aborted).toBe(false);
+  });
+
   it('로그인하기 전에는 부르지 않고, 정리되면 멈춘다', async () => {
     const fetchSpy = respond([{ cursor: '1', items: [], peers: [] }]);
     TestBed.configureTestingModule({ providers: [provideHttpClient()] });

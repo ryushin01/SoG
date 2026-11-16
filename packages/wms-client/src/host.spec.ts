@@ -57,6 +57,21 @@ describe('WmsHost.ready', () => {
     expect(localStorage.getItem('sog:mode')).toBe('local');
   });
 
+  it('새 모드를 기기에 저장하지 못하면 다시 열지 않는다(새로 고침 반복 방지)', async () => {
+    localStorage.setItem('sog:mode', 'local');
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('가득 참', 'QuotaExceededError');
+    });
+    const host = hostWith(Response.json({ mode: 'remote' }));
+    const reload = vi
+      .spyOn(host as unknown as { reload(): void }, 'reload')
+      .mockImplementation(() => undefined);
+    expect(await host.ready()).toBe('local');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reload).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it('서버 일시 오류(500)면 마지막 모드를 쓰고 덮어쓰지 않는다', async () => {
     localStorage.setItem('sog:mode', 'remote');
     const host = hostWith(new Response(null, { status: 500 }));

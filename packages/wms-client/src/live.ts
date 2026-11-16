@@ -12,6 +12,8 @@ export const LIVE_HIDDEN_MS = 15_000;
 export const IDLE_AFTER_MS = 60_000;
 /** 이만큼 가려져 있으면 멈췄다가 다시 보이면 곧바로 이어 받습니다(순번으로 이어 받아 빠지는 변경 없음). */
 export const STOP_HIDDEN_AFTER_MS = 120_000;
+/** 요청 하나(응답 본문까지)를 기다리는 최대 시간. 멈춘 요청이 다음 차례를 영영 막지 않게 합니다. */
+export const LIVE_TIMEOUT_MS = 15_000;
 
 /** 접속 신호에 실을 이 탭의 위치. 사용자는 서버가 토큰으로 정합니다. */
 export interface LiveHere {
@@ -159,9 +161,11 @@ export class LiveSync {
     const token = this.auth.token();
     if (!token) return;
     try {
+      // 기한은 응답 본문을 다 읽을 때까지 걸립니다(멈추면 끊고 다음 차례에 다시 보냄).
       const response = await fetch('/api/live', {
         method: 'POST',
         cache: 'no-store',
+        signal: AbortSignal.timeout(LIVE_TIMEOUT_MS),
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ after: this.cursor, here: this.here?.() ?? null }),
       });

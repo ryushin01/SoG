@@ -60,10 +60,9 @@ export class WmsHost {
       const checked = checkMode();
       if (remembered) {
         void checked.then((mode) => {
-          if (mode && mode !== remembered) {
-            writeMode(mode);
-            this.reload();
-          }
+          // 새 모드가 기기에 저장됐을 때만 다시 엽니다. 저장 공간이 가득 차 쓰지 못하면 다시 열어도
+          // 옛 모드를 읽어 같은 일이 되풀이되므로(새로 고침 반복), 이번에는 기억한 모드로 계속합니다.
+          if (mode && mode !== remembered && readMode() === mode) this.reload();
         });
         this.mode.set(remembered);
         return remembered;
