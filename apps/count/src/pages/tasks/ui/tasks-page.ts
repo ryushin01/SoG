@@ -21,7 +21,8 @@ export class TasksPage {
 
   protected readonly tasks = resource({
     params: () => this.session.operatorId() ?? undefined,
-    loader: ({ params }) => this.repo.list(params),
+    // 기기 사본을 먼저 보여 주고 새로 받습니다.
+    stream: ({ params }) => this.repo.watchList(params),
   });
   protected readonly active = computed(() =>
     ((this.tasks.hasValue() ? this.tasks.value() : undefined)?.data ?? []).filter(

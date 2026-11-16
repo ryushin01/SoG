@@ -47,24 +47,26 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
   const exec = (): SqlExecutor => current.getStore() ?? db;
 
   async function applyOps(tx: SqlExecutor, ops: WriteOp[]): Promise<void> {
-    // 같은 저장소의 put은 묶어서 한 번에 넣습니다(시드처럼 수백 건일 때 왕복을 줄임).
-    let batch: { store: StoreName; ids: string[]; data: string[] } | null = null;
+    // 지우기 사이의 put은 저장소별로 모아 저장소마다 한 번에 넣습니다(실사 승인처럼 재고·이동이 번갈아
+    // 나와도 왕복이 늘지 않게). 저장소가 다르면 서로 다른 문서라 순서를 바꿔도 결과가 같고, 같은 문서를
+    // 두 번 넣으면 마지막 값이 이깁니다(INSERT 하나에 같은 키가 두 번 나오면 Postgres가 거절하므로 미리 합침).
+    let groups = new Map<StoreName, Map<string, string>>();
     const flush = async () => {
-      if (!batch || batch.ids.length === 0) return;
-      await tx.query(
-        `insert into docs (store, id, data)
-         select $1, u.id, u.data::jsonb from unnest($2::text[], $3::text[]) as u(id, data)
-         on conflict (store, id) do update set data = excluded.data`,
-        [batch.store, batch.ids, batch.data],
-      );
-      batch = null;
+      for (const [store, rows] of groups) {
+        await tx.query(
+          `insert into docs (store, id, data)
+           select $1, u.id, u.data::jsonb from unnest($2::text[], $3::text[]) as u(id, data)
+           on conflict (store, id) do update set data = excluded.data`,
+          [store, [...rows.keys()], [...rows.values()]],
+        );
+      }
+      groups = new Map();
     };
     for (const op of ops) {
       if ('put' in op) {
-        if (batch && batch.store !== op.store) await flush();
-        batch ??= { store: op.store, ids: [], data: [] };
-        batch.ids.push(op.put.id);
-        batch.data.push(JSON.stringify(op.put));
+        let rows = groups.get(op.store);
+        if (!rows) groups.set(op.store, (rows = new Map()));
+        rows.set(op.put.id, JSON.stringify(op.put));
         continue;
       }
       await flush();
@@ -82,6 +84,14 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
         [store, id],
       );
       return rows[0]?.data;
+    },
+    async getMany<T extends { id: string }>(store: StoreName, ids: readonly string[]) {
+      if (ids.length === 0) return [];
+      const { rows } = await exec().query<{ data: T }>(
+        'select data from docs where store = $1 and id = any($2::text[])',
+        [store, [...new Set(ids)]],
+      );
+      return rows.map((row) => row.data);
     },
     async all<T>(store: StoreName) {
       const { rows } = await exec().query<{ data: T }>('select data from docs where store = $1', [

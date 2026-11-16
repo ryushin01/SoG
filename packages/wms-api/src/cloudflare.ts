@@ -64,11 +64,18 @@ function requestScoped(current: AsyncLocalStorage<SqlDatabase>): SqlDatabase {
   };
 }
 
+/** 요청 하나의 DB 사용량. 응답의 Server-Timing에 실어 운영에서 서버·DB 시간을 네트워크와 나눠 봅니다. */
+interface DbStats {
+  queries: number;
+  ms: number;
+}
+
 /**
  * 응답을 보낸 뒤에도 끝나지 않은 쿼리(가끔 지우는 오래된 변경 기록 등)를 기다렸다가 닫습니다.
- * 그냥 닫으면 아직 줄 서 있던 쿼리가 "끝난 풀" 오류로 버려집니다.
+ * 그냥 닫으면 아직 줄 서 있던 쿼리가 "끝난 풀" 오류로 버려집니다. 트랜잭션 안의 쿼리까지 수와 시간을 셉니다.
  */
-function closeAfterPending(db: SqlDatabase): SqlDatabase {
+function closeAfterPending(db: SqlDatabase): SqlDatabase & { stats: DbStats } {
+  const stats: DbStats = { queries: 0, ms: 0 };
   const pending = new Set<Promise<unknown>>();
   const track = <T>(promise: Promise<T>): Promise<T> => {
     pending.add(promise);
@@ -78,15 +85,42 @@ function closeAfterPending(db: SqlDatabase): SqlDatabase {
     );
     return promise;
   };
+  const timed = <T>(run: () => Promise<T>): Promise<T> => {
+    stats.queries++;
+    const started = performance.now();
+    return run().finally(() => {
+      stats.ms += performance.now() - started;
+    });
+  };
   return {
+    stats,
     query: <R = Record<string, unknown>>(text: string, params?: unknown[]) =>
-      track(db.query<R>(text, params)),
-    transaction: <T>(work: (tx: SqlExecutor) => Promise<T>) => track(db.transaction(work)),
+      track(timed(() => db.query<R>(text, params))),
+    transaction: <T>(work: (tx: SqlExecutor) => Promise<T>) =>
+      track(
+        db.transaction((tx) =>
+          work({
+            query: <R = Record<string, unknown>>(text: string, params?: unknown[]) =>
+              timed(() => tx.query<R>(text, params)),
+          }),
+        ),
+      ),
     async close() {
       while (pending.size) await Promise.allSettled([...pending]);
       await db.close();
     },
   };
+}
+
+/** Server-Timing을 붙입니다(브라우저 개발자 도구의 네트워크 탭 Timing에 보임). */
+function withTiming(response: Response, started: number, stats: DbStats): Response {
+  const result = new Response(response.body, response);
+  const app = (performance.now() - started).toFixed(1);
+  result.headers.set(
+    'Server-Timing',
+    `app;dur=${app}, db;dur=${stats.ms.toFixed(1)};desc="${stats.queries} queries"`,
+  );
+  return result;
 }
 
 export function createWorker(openDatabase: OpenDatabase) {
@@ -120,11 +154,13 @@ export function createWorker(openDatabase: OpenDatabase) {
       );
       return json(500, { code: 'INTERNAL', message: '서버 설정(AUTH_SECRET)이 없습니다.' });
     }
+    const started = performance.now();
     const database = closeAfterPending(openDatabase({ ...env, HYPERDRIVE: hyperdrive }));
     try {
-      return await current.run(database, async () =>
+      const response = await current.run(database, async () =>
         (await getHandler(authSecret, env.CRON_SECRET)).handle(request),
       );
+      return withTiming(response, started, database.stats);
     } catch (error) {
       console.error(error);
       return json(500, { code: 'INTERNAL', message: '서버에서 문제가 생겼습니다.' });

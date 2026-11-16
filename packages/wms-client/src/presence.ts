@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { WmsHost } from './host';
 import { AuthSession } from './auth';
+import { LiveSync } from './live';
 
 export interface PresenceState {
   /** 수정 중인지. 저장하지 않은 입력이 있으면 true */
@@ -37,7 +38,11 @@ export const PRESENCE_APP = new InjectionToken<string>('PRESENCE_APP', { factory
 const CHANNEL = 'sog-presence';
 const HEARTBEAT_MS = 5_000;
 const EXPIRE_MS = 15_000;
-const REMOTE_POLL_MS = 3_000;
+/**
+ * 실제 서버 모드의 접속자는 실시간 반영(LiveSync)이 차례마다 통째로 바꿉니다. 연결이 끊겨 받지 못하면
+ * 이만큼 지나 목록에서 뺍니다(조작이 없으면 10초, 가려지면 15초 간격이라 넉넉히).
+ */
+const REMOTE_EXPIRE_MS = 45_000;
 
 /**
  * 실시간 접속 표시. 같은 브라우저의 다른 탭(다른 사용자, 현장 앱)이 어느 자원을 보고 있는지,
@@ -49,6 +54,7 @@ export class Presence {
   private readonly auth = inject(AuthSession);
   private readonly app = inject(PRESENCE_APP);
   private readonly host = inject(WmsHost);
+  private readonly live = inject(LiveSync);
   /** 이 탭의 접속 표시 ID. 로그인한 사용자가 바뀌면 새로 만듭니다(아래 생성자). */
   private tabId = newTabId();
   private readonly channel =
@@ -63,7 +69,8 @@ export class Presence {
     );
     const timer = setInterval(() => {
       this.now.set(Date.now());
-      this.announce();
+      // 실제 서버 모드의 신호는 실시간 반영이 차례마다 함께 보냅니다.
+      if (this.host.mode() !== 'remote') this.announce();
     }, HEARTBEAT_MS);
     const leave = () => this.send({ type: 'leave', tabId: this.tabId });
     if (typeof window !== 'undefined') window.addEventListener('pagehide', leave);
@@ -89,18 +96,21 @@ export class Presence {
         signedInAs = userId;
       });
     });
-    // 실제 서버 모드에서는 다른 기기의 접속 정보를 서버에서 받아 옵니다.
-    // 모드를 알기 전에 이 서비스가 정리될 수 있으므로, 정리된 뒤에는 폴링을 시작하지 않습니다.
-    let poll: ReturnType<typeof setInterval> | undefined;
+    // 실제 서버 모드에서는 실시간 반영(변경 피드와 한 요청)으로 내 위치를 보내고 다른 기기의 접속자를 받습니다.
+    // 모드를 알기 전에 이 서비스가 정리될 수 있으므로, 정리된 뒤에는 시작하지 않습니다.
     let destroyed = false;
+    let stopPeers: (() => void) | undefined;
     void this.host.ready().then((mode) => {
       if (destroyed || mode !== 'remote') return;
-      void this.pull();
-      poll = setInterval(() => void this.pull(), REMOTE_POLL_MS);
+      this.live.setHere(() =>
+        this.mine && this.auth.user() ? { ...this.mine, tabId: this.tabId, app: this.app } : null,
+      );
+      stopPeers = this.live.onPeers((items) => this.receivePeers(items));
+      this.live.start();
     });
     inject(DestroyRef).onDestroy(() => {
       destroyed = true;
-      clearInterval(poll);
+      stopPeers?.();
     });
   }
 
@@ -134,8 +144,9 @@ export class Presence {
     return computed(() => {
       const target = resource();
       const now = this.now();
+      const ttl = this.host.mode() === 'remote' ? REMOTE_EXPIRE_MS : EXPIRE_MS;
       return [...this.peersById().values()]
-        .filter((peer) => now - peer.at < EXPIRE_MS)
+        .filter((peer) => now - peer.at < ttl)
         .filter((peer) => peer.resource === target || peer.resource.startsWith(`${target}/`))
         .sort((a, b) => Number(b.editing) - Number(a.editing) || a.userId.localeCompare(b.userId));
     });
@@ -143,6 +154,11 @@ export class Presence {
 
   private announce(): void {
     if (!this.mine) return;
+    if (this.host.mode() === 'remote') {
+      // 다음 차례를 기다리지 않고 바뀐 위치를 바로 보냅니다.
+      this.live.poke();
+      return;
+    }
     this.send({
       type: 'here',
       peer: {
@@ -189,44 +205,25 @@ export class Presence {
   }
 
   private sendRemote(message: Message): void {
-    if (!this.auth.token()) return;
-    if (message.type === 'here') {
-      const { at: _at, ...peer } = message.peer;
-      void fetch('/api/presence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...this.authHeader() },
-        body: JSON.stringify(peer),
-        keepalive: true,
-      }).catch(() => undefined);
-    } else if (message.type === 'leave') {
-      void fetch(`/api/presence/${encodeURIComponent(message.tabId)}`, {
-        method: 'DELETE',
-        headers: this.authHeader(),
-        keepalive: true,
-      }).catch(() => undefined);
-    }
+    if (!this.auth.token() || message.type !== 'leave') return;
+    // 떠날 때는 다음 차례를 기다리지 않고 바로 지웁니다(탭을 닫는 중에도 끝나도록 keepalive).
+    void fetch(`/api/presence/${encodeURIComponent(message.tabId)}`, {
+      method: 'DELETE',
+      headers: this.authHeader(),
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
-  private async pull(): Promise<void> {
-    try {
-      if (!this.auth.token()) return;
-      const response = await fetch('/api/presence', {
-        cache: 'no-store',
-        headers: this.authHeader(),
-      });
-      if (!response.ok) return;
-      const body = (await response.json()) as { items: unknown[] };
-      const next = new Map<string, Peer>();
-      for (const raw of body.items) {
-        const message = parseMessage({ type: 'here', peer: raw });
-        if (message?.type === 'here' && message.peer.tabId !== this.tabId)
-          next.set(message.peer.tabId, message.peer);
-      }
-      this.peersById.set(next);
-      this.now.set(Date.now());
-    } catch {
-      // 오프라인이면 다음 차례에 다시 받습니다.
+  /** 실시간 반영이 받아 온 지금 접속자(모양을 확인한 뒤 씀). 이 탭은 뺍니다. */
+  private receivePeers(items: unknown[]): void {
+    const next = new Map<string, Peer>();
+    for (const raw of items) {
+      const message = parseMessage({ type: 'here', peer: raw });
+      if (message?.type === 'here' && message.peer.tabId !== this.tabId)
+        next.set(message.peer.tabId, message.peer);
     }
+    this.peersById.set(next);
+    this.now.set(Date.now());
   }
 }
 
