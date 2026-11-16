@@ -13,9 +13,10 @@ import type {
   SkuDetail,
   SkuSummary,
 } from '@sog/domain';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PASSWORD, issueToken, LOCAL_AUTH_SECRET } from './auth';
 import { createWmsServer, type WmsServer } from './server';
+import type { Storage } from './storage';
 
 const opened: WmsServer[] = [];
 let dbSeq = 0;
@@ -689,5 +690,79 @@ describe('변경 이력', () => {
     });
     expect(adjust.locationCode).toBe(stock.location.code);
     expect(adjust.reason).toContain('조정');
+  });
+});
+
+describe('입력 검증과 오류 응답', () => {
+  it('다른 작업의 항목에는 재실사를 요청할 수 없다(승인된 작업의 항목이 바뀌지 않음)', async () => {
+    const [server] = await tabs(1);
+    const approved = (await call(server!, 'GET', '/api/counts/ct-001')).body as CountTaskDetail;
+    expect(approved.task.status).toBe('approved');
+    const line = approved.lines.find((l) => l.status === 'counted')!;
+
+    const response = await call(server!, 'POST', `/api/counts/ct-003/lines/${line.id}/recount`, {
+      ifMatch: line.version,
+    });
+    expect(response.status).toBe(404);
+    const after = (await call(server!, 'GET', '/api/counts/ct-001')).body as CountTaskDetail;
+    expect(after.lines.find((l) => l.id === line.id)!.status).toBe('counted');
+  });
+
+  it('깨진 주소는 404, 숫자가 아닌 쪽 번호·개수와 모르는 정렬 키는 기본값으로 돌린다', async () => {
+    const [server] = await tabs(1);
+    expect((await call(server!, 'GET', '/api/skus/%E0%A4%A')).status).toBe(404);
+
+    const page = (await call(server!, 'GET', '/api/skus?page=abc&size=abc&sort=__proto__'))
+      .body as Page<SkuSummary>;
+    expect([page.page, page.size, page.items.length]).toEqual([1, 20, 20]);
+    expect(page.items.map((sku) => sku.code)).toEqual(
+      [...page.items.map((sku) => sku.code)].sort((a, b) => a.localeCompare(b)),
+    );
+
+    const few = (await call(server!, 'GET', '/api/movements?limit=abc')).body as {
+      items: Movement[];
+    };
+    expect(few.items.length).toBe(50);
+    const many = (await call(server!, 'GET', '/api/movements?limit=100000')).body as {
+      items: Movement[];
+    };
+    expect(many.items.length).toBeLessThanOrEqual(200);
+  });
+
+  it('실사 작업의 로케이션은 고른 구역 안에서만 받는다', async () => {
+    const [server] = await tabs(1);
+    const response = await call(server!, 'POST', '/api/counts', {
+      body: {
+        title: '구역 밖 로케이션',
+        zone: 'A',
+        assigneeId: 'u-lee',
+        dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+        locationIds: ['loc-C-01-01-1'],
+      },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('처리하지 못한 오류는 내부 문구 없이 INTERNAL로 답하고 서버 로그에 남긴다', async () => {
+    const failing: Storage = {
+      get: async () => ({ id: 'seed', version: 3 }) as never,
+      all: async () => {
+        throw new Error('relation "docs" does not exist');
+      },
+      write: async () => undefined,
+      close: () => undefined,
+    };
+    const server = await createWmsServer({ storage: failing, dbName: `test-${dbSeq++}` });
+    opened.push(server);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await call(server, 'GET', '/api/dashboard');
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      code: 'INTERNAL',
+      message: '서버에서 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
+    });
+    expect(String(log.mock.calls[0]?.[0])).toContain('GET /api/dashboard');
+    log.mockRestore();
   });
 });

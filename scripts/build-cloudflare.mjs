@@ -2,13 +2,18 @@
 // 먼저 두 앱(과 Storybook)을 빌드해 두어야 합니다. /api는 wrangler가 packages/wms-api/src/cloudflare.ts를 묶어 올립니다.
 // https://developers.cloudflare.com/workers/static-assets/
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const site = join(root, 'site');
 execFileSync(process.execPath, [join(root, 'scripts/assemble-site.mjs')], { stdio: 'inherit' });
+
+// 보안 헤더(클릭재킹·MIME 추측 방지 등). Worker가 만드는 응답에도 같은 파일의 값을 붙입니다(cloudflare.ts).
+const security = JSON.parse(
+  readFileSync(join(root, 'packages/wms-api/src/security-headers.json'), 'utf8'),
+);
 
 // Storybook 폴더는 넘김 규칙을 두지 않습니다. 정적 자산의 기본 html_handling(auto-trailing-slash)이
 // `/storybook/backoffice`와 `…/index.html`을 `/storybook/backoffice/`로 넘기고 그 주소에서 index.html을
@@ -22,6 +27,9 @@ const immutable = ['chunk-*', 'main-*', 'polyfills-*', 'styles-*', 'media/*'].fl
   `/count/${name}`,
 ]);
 const headers = [
+  // 모든 정적 파일(두 앱, Storybook). Storybook은 같은 출처 iframe으로 미리보기를 띄우므로 frame-ancestors는 'self'
+  '/*',
+  ...Object.entries(security).map(([name, value]) => `  ${name}: ${value}`),
   // 서비스 워커와 그 목록은 늘 새로 받아야 새 버전을 알아챕니다.
   ...['ngsw-worker.js', 'ngsw.json', 'safety-worker.js'].flatMap((file) => [
     `/count/${file}`,

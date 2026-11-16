@@ -1,10 +1,17 @@
 // site/를 배포 환경(Cloudflare)과 같은 규칙으로 띄웁니다. 파일이 없으면 각 앱의 index.html로 보냅니다.
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'site');
+// 운영(_headers, Worker)과 같은 보안 헤더를 모든 응답에 붙입니다.
+const security = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../packages/wms-api/src/security-headers.json'),
+    'utf8',
+  ),
+);
 const port = Number(process.env.PORT ?? 4300);
 // --api: 실제 서버 모드. /api를 PGlite(메모리 Postgres) 위의 서버가 받습니다(먼저 node scripts/build-api.mjs).
 const withApi = process.argv.includes('--api');
@@ -23,6 +30,7 @@ const types = {
 };
 
 createServer(async (request, response) => {
+  for (const [name, value] of Object.entries(security)) response.setHeader(name, value);
   const url = new URL(request.url ?? '/', 'http://localhost');
   if (url.pathname.startsWith('/api/')) {
     if (!handler) {

@@ -26,6 +26,30 @@ function text(value: unknown, max: number): string | null {
   return typeof value === 'string' && value.length <= max ? value : null;
 }
 
+const encoder = new TextEncoder();
+
+/**
+ * 비밀 값을 일정 시간에 비교합니다. 두 값을 같은 임시 키의 HMAC으로 고정 길이로 만든 뒤 바이트를 모두 비교해,
+ * 맞는 앞부분의 길이가 응답 시간으로 드러나지 않게 합니다(Workers·Node 모두 Web Crypto).
+ */
+async function sameSecret(given: string, expected: string): Promise<boolean> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    crypto.getRandomValues(new Uint8Array(32)),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const [a, b] = await Promise.all(
+    [given, expected].map(
+      async (value) => new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(value))),
+    ),
+  );
+  let diff = 0;
+  for (let i = 0; i < a!.length; i++) diff |= a![i]! ^ b![i]!;
+  return diff === 0;
+}
+
 /**
  * 실제 서버의 /api. 업무 API는 브라우저 데모 서버와 같은 코드(@sog/wms-server)를 Postgres 위에서 돌리고,
  * 기기 사이의 실시간 반영을 위해 변경 피드(/api/changes)와 접속 표시(/api/presence)를 더합니다.
@@ -120,7 +144,17 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       return json(200, { items: rows.map((row) => row.data) });
     }
     if (request.method === 'DELETE' && tabId) {
-      await db.query('delete from presence where tab_id = $1', [decodeURIComponent(tabId)]);
+      // 자기 탭만 지웁니다. 목록 응답에 모든 탭 ID가 보이므로, 다른 사람의 표시를 지우지 못하게 합니다.
+      let id: string;
+      try {
+        id = decodeURIComponent(tabId);
+      } catch {
+        return json(404, { code: 'NOT_FOUND', message: '접속 정보를 찾을 수 없습니다.' });
+      }
+      await db.query("delete from presence where tab_id = $1 and data->>'userId' = $2", [
+        id,
+        userId,
+      ]);
       return json(204, null);
     }
     if (request.method === 'POST') {
@@ -137,9 +171,11 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
       if (!peer.tabId || !peer.resource) {
         return json(400, { code: 'VALIDATION', message: '접속 정보가 올바르지 않습니다.' });
       }
+      // 같은 탭 ID라도 다른 사용자의 항목이면 덮어쓰지 않습니다(남의 표시를 자기 것으로 바꾸지 못하게).
       await db.query(
         `insert into presence (tab_id, data, seen_at) values ($1, $2::jsonb, now())
-         on conflict (tab_id) do update set data = excluded.data, seen_at = now()`,
+         on conflict (tab_id) do update set data = excluded.data, seen_at = now()
+         where presence.data->>'userId' = excluded.data->>'userId'`,
         [peer.tabId, JSON.stringify(peer)],
       );
       return json(204, null);
@@ -156,7 +192,10 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
           // 예약 작업(Worker의 scheduled)이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
           if (
             !options.cronSecret ||
-            request.headers.get('authorization') !== `Bearer ${options.cronSecret}`
+            !(await sameSecret(
+              request.headers.get('authorization') ?? '',
+              `Bearer ${options.cronSecret}`,
+            ))
           ) {
             return json(401, { code: 'UNAUTHENTICATED', message: '예약 작업만 부를 수 있습니다.' });
           }
@@ -188,9 +227,11 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
             : error instanceof RangeError
               ? error.message
               : '서버에서 문제가 생겼습니다.';
-        if (!(error instanceof SyntaxError) && !(error instanceof RangeError)) console.error(error);
-        return json(error instanceof SyntaxError || error instanceof RangeError ? 400 : 500, {
-          code: 'VALIDATION',
+        const badRequest = error instanceof SyntaxError || error instanceof RangeError;
+        if (!badRequest)
+          console.error(`[sog] 처리하지 못한 오류: ${request.method} ${url.pathname}`, error);
+        return json(badRequest ? 400 : 500, {
+          code: badRequest ? 'VALIDATION' : 'INTERNAL',
           message,
         });
       }

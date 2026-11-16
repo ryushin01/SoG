@@ -99,8 +99,9 @@ export const wmsInterceptor: HttpInterceptorFn = (request, next) => {
           subscriber.error(
             new HttpErrorResponse({
               status: 500,
+              // 브라우저 안 데모 서버(IndexedDB)가 실패한 경우라 같은 사용자에게 원인을 그대로 보여 줍니다.
               error: {
-                code: 'VALIDATION',
+                code: 'INTERNAL',
                 message: error instanceof Error ? error.message : String(error),
               },
               url: request.url,

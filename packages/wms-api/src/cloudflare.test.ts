@@ -119,6 +119,21 @@ describe('Cloudflare Worker 진입점', () => {
     expect(opened).toBe(0);
   });
 
+  it('Worker가 내보내는 응답(API, 현장 앱 화면 주소)에도 보안 헤더를 붙인다', async () => {
+    for (const response of [
+      await get('/api/health'),
+      await get('/api/skus?size=1'),
+      await worker.fetch(new Request('https://sog.test/count/tasks/ct-003'), env(), ctx),
+      await worker.fetch(new Request('https://sog.test/'), env(), ctx),
+    ]) {
+      expect(response.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'self'");
+      expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+      expect(response.headers.get('permissions-policy')).toContain('camera=(self)');
+    }
+  });
+
   it('예약 작업은 CRON_SECRET으로 데모 데이터를 처음 상태로 되돌린다', async () => {
     await expect(worker.scheduled(undefined, env(), ctx)).resolves.toBeUndefined();
     await Promise.all(waits);

@@ -208,8 +208,23 @@ describe('실제 서버(Postgres)', () => {
     ).toBe(204);
     expect((await call<{ items: unknown[] }>('GET', '/api/presence')).body.items).toEqual([peer]);
     expect((await call('POST', '/api/presence', { body: { tabId: 't2' } })).status).toBe(400);
-    await call('DELETE', '/api/presence/t1');
+    await call('DELETE', '/api/presence/t1', { user: 'u-lee' });
     expect((await call<{ items: unknown[] }>('GET', '/api/presence')).body.items).toEqual([]);
+  });
+
+  it('다른 사용자의 접속 표시는 같은 탭 ID로 덮어쓰거나 지울 수 없다', async () => {
+    const mine = { tabId: 't1', app: '현장 앱', resource: 'counts/ct-003', editing: true };
+    await call('POST', '/api/presence', { body: mine, user: 'u-lee' });
+    // 목록에 보이는 탭 ID로 다른 사용자(김하늘)가 덮어쓰거나 지우려 해도 이서준의 표시가 남습니다.
+    await call('POST', '/api/presence', { body: { ...mine, resource: 'skus/x', editing: false } });
+    expect((await call('DELETE', '/api/presence/t1')).status).toBe(204);
+    expect((await call('DELETE', '/api/presence/%E0%A4%A')).status).toBe(404);
+    const items = (
+      await call<{ items: { userId: string; resource: string }[] }>('GET', '/api/presence')
+    ).body.items;
+    expect(items.map(({ userId, resource }) => ({ userId, resource }))).toEqual([
+      { userId: 'u-lee', resource: 'counts/ct-003' },
+    ]);
   });
 
   it('변경 피드·접속 표시는 로그인이 필요하고, 초기화 예약 작업은 CRON_SECRET이 필요하다', async () => {
@@ -218,6 +233,12 @@ describe('실제 서버(Postgres)', () => {
     expect((await call('GET', '/api/skus', { user: null })).status).toBe(401);
     const denied = await api.handle(new Request('https://sog.test/api/cron/reset'));
     expect(denied.status).toBe(401);
+    const wrong = await api.handle(
+      new Request('https://sog.test/api/cron/reset', {
+        headers: { authorization: 'Bearer cron-tesT' },
+      }),
+    );
+    expect(wrong.status).toBe(401);
     const allowed = await api.handle(
       new Request('https://sog.test/api/cron/reset', {
         headers: { authorization: 'Bearer cron-test' },

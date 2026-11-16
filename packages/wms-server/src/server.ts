@@ -45,6 +45,7 @@ import {
   type SkuDetail,
   type SkuPatch,
   type SkuQuery,
+  type SkuSort,
   type SkuSummary,
   type StockLevel,
   type SubmitCountLineRequest,
@@ -636,7 +637,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       async (ctx) => {
         const skuId = ctx.query.get('skuId');
         const type = ctx.query.get('type');
-        const limit = Number(ctx.query.get('limit') ?? 50);
+        const limit = intParam(ctx.query.get('limit'), 50, 1, MAX_LIST_LIMIT);
         const items = (await load.movements())
           .filter(
             (movement) => (!skuId || movement.skuId === skuId) && (!type || movement.type === type),
@@ -650,7 +651,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       'GET',
       '/api/activity',
       async (ctx) => {
-        const limit = Number(ctx.query.get('limit') ?? 20);
+        const limit = intParam(ctx.query.get('limit'), 20, 1, MAX_LIST_LIMIT);
         const items = (await db.all<Activity>('activity'))
           .sort((a, b) => b.at.localeCompare(a.at))
           .slice(0, limit);
@@ -831,15 +832,17 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   ];
 
   async function listSkus(query: URLSearchParams): Promise<Page<SkuSummary>> {
+    const sort = query.get('sort') as SkuSort | null;
     const q: SkuQuery = {
       q: query.get('q') ?? '',
       category: (query.get('category') ?? '') as SkuQuery['category'],
       status: (query.get('status') ?? '') as SkuQuery['status'],
       zone: (query.get('zone') ?? '') as SkuQuery['zone'],
-      sort: (query.get('sort') ?? 'code') as SkuQuery['sort'],
+      // 정렬은 정해진 열로만 합니다. 모르는 키는 코드순으로 돌립니다.
+      sort: sort && SKU_SORTS.includes(sort) ? sort : 'code',
       dir: query.get('dir') === 'desc' ? 'desc' : 'asc',
-      page: Math.max(1, Number(query.get('page') ?? 1)),
-      size: Math.min(100, Math.max(1, Number(query.get('size') ?? 20))),
+      page: intParam(query.get('page'), 1, 1, 10_000),
+      size: intParam(query.get('size'), 20, 1, 100),
     };
     const [skus, stocks, locations] = await Promise.all([
       load.skus(),
@@ -1467,12 +1470,20 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       load.counts(),
       load.lines(),
     ]);
+    const inZone = locations.filter((location) => location.zone === request.zone);
+    // 로케이션을 골라 보내면 모두 고른 구역 안의 로케이션이어야 합니다(다른 구역 재고가 섞이지 않게).
+    if (request.locationIds !== undefined && request.locationIds !== null) {
+      const ids: unknown = request.locationIds;
+      if (
+        !Array.isArray(ids) ||
+        ids.length > inZone.length ||
+        ids.some((id) => typeof id !== 'string' || !inZone.some((l) => l.id === id))
+      ) {
+        throw new HttpError(400, 'VALIDATION', '고른 구역 안의 로케이션만 실사할 수 있습니다.');
+      }
+    }
     const targetIds = new Set(
-      request.locationIds?.length
-        ? request.locationIds
-        : locations
-            .filter((location) => location.zone === request.zone)
-            .map((location) => location.id),
+      request.locationIds?.length ? request.locationIds : inZone.map((location) => location.id),
     );
     // 진행 중인 다른 실사와 같은 재고를 동시에 세지 않도록 막습니다.
     const busy = new Set(
@@ -1656,6 +1667,9 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
   ): Promise<MutationResult> {
     const task = await mustGet<CountTask>('counts', taskId, '실사 작업');
     const line = await mustGet<CountLine>('countLines', lineId, '실사 항목');
+    // 주소의 작업에 속한 항목만 바꿉니다. 다른 작업(이미 승인된 작업 등)의 항목을 건드리지 않게 합니다.
+    if (line.taskId !== taskId)
+      throw new HttpError(404, 'NOT_FOUND', '실사 항목을 찾을 수 없습니다.');
     await requireVersion(ctx, line, async () => lineView(line));
     if (!['in_progress', 'submitted'].includes(task.status) || line.status !== 'counted') {
       throw new HttpError(409, 'INVALID_STATE', '센 항목만 다시 세도록 요청할 수 있습니다.');
@@ -1919,9 +1933,11 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         if (error.current !== undefined) body.current = error.current;
         return json(error.status, body);
       }
+      // DB 오류 같은 내부 문구는 응답에 싣지 않고 서버 로그(운영은 Workers 로그)에만 남깁니다.
+      console.error(`[sog] 처리하지 못한 오류: ${method} ${url.pathname}`, error);
       const body: ApiError = {
-        code: 'VALIDATION',
-        message: error instanceof Error ? error.message : String(error),
+        code: 'INTERNAL',
+        message: '서버에서 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
       };
       return json(500, body);
     }
@@ -2010,8 +2026,33 @@ function match(pattern: string, path: string): Record<string, string> | null {
   const params: Record<string, string> = {};
   for (let i = 0; i < a.length; i++) {
     const part = a[i]!;
-    if (part.startsWith(':')) params[part.slice(1)] = decodeURIComponent(b[i]!);
-    else if (part !== b[i]) return null;
+    if (part.startsWith(':')) {
+      // 깨진 퍼센트 인코딩(%E0%A4%A 등)은 없는 경로로 봅니다(500이 아니라 404).
+      const value = safeDecode(b[i]!);
+      if (value === null) return null;
+      params[part.slice(1)] = value;
+    } else if (part !== b[i]) return null;
   }
   return params;
+}
+
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 목록 개수 상한. 화면은 최대 100건(활동 기록)을 씁니다. */
+const MAX_LIST_LIMIT = 200;
+
+const SKU_SORTS: readonly SkuSort[] = ['code', 'name', 'onHand', 'available', 'value', 'updatedAt'];
+
+/** 쿼리의 정수 값. 숫자가 아니면 기본값, 범위를 넘으면 끝 값으로 맞춥니다. */
+function intParam(raw: string | null, fallback: number, min: number, max: number): number {
+  if (raw === null || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
