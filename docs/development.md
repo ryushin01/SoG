@@ -15,6 +15,29 @@ e2e/             프로덕션 빌드 E2E (Playwright + axe)
 scripts/         배포 구조 조립(Cloudflare 정적 자산), 정적 서버, API 번들
 ```
 
+### 업무 서버(`packages/wms-server/src`)
+
+브라우저 데모와 실제 서버가 같은 코드를 씁니다. 한 파일(약 2,100줄)이던 것을 1.2.0에서 역할별로 나눴습니다.
+
+```
+server.ts         저장소·잠금·시드 준비, 요청을 라우트로 나누기(로그인·권한·오류 응답·막힌 시도 기록)
+core/
+├─ types.ts       요청·응답, 서버 옵션, HttpError, 요청 문맥(Context), 쓰기 결과(MutationResult), 라우트
+├─ http.ts        응답 만들기(json), 경로 맞추기(match), 쿼리 정수(intParam), 본문 값 검사(positiveInt, text)
+├─ scope.ts       공통 범위: 저장소·잠금·읽기 도우미(load)·시계·ID, 버전(If-Match)·담당자 검사, touch
+├─ views.ts       조회 모델: 품목·실사·출고 상세, 품목 목록, 창고 도면, 운영 현황
+├─ mutate.ts      쓰기 공통 처리: 쓰기 잠금, 멱등 재전송, 변경 이력·활동 기록, 변경 알림
+└─ history.ts     변경 이력에 남길 필드, 이전·이후 비교, 버전 충돌로 막힌 시도
+routes/
+├─ system.ts      기준 정보, 로그인, 운영 현황, 창고 도면, 활동 기록, 데모 초기화
+├─ skus.ts        품목(목록·상세·변경 이력·수정), 재고 조정, 입출고
+├─ counts.ts      재고 실사(만들기, 시작·제출·취소, 항목 입력, 재실사 요청, 승인 정산)
+├─ orders.ts      출고 지시(만들기·재고 예약, 피킹, 출고 확정, 취소)
+└─ index.ts       라우트 모음, 로그인 없이·관리자만 부를 수 있는 라우트
+```
+
+새 라우트는 해당 `routes/*.ts`의 표에 더하고, 쓰기는 `mutate(ctx, 멱등 범위, 처리기)`로 감싸면 잠금·멱등·변경 이력·활동 기록·변경 알림이 함께 처리됩니다. 경로 길이와 고정 부분이 같은 라우트(`/api/locations/overview`와 `/:id`)는 먼저 놓인 것이 이기므로 한 모듈 안에서 순서를 지킵니다.
+
 공유 패키지는 빌드하지 않고 TypeScript 소스를 그대로 씁니다. 앱의 `tsconfig.json` `paths`가 `@sog/*`를 각 패키지의 `src/index.ts`로 연결해, Angular 컴파일러가 앱 코드와 함께 컴파일합니다(데코레이터가 있는 `wms-client`도 마찬가지). 두 앱이 함께 쓰는 컴파일러·Angular 옵션은 루트의 `tsconfig.angular.json`에 있고, 앱마다 다른 경로 별칭만 각 앱의 `tsconfig.json`에 둡니다.
 
 ## Angular 사용 방식
