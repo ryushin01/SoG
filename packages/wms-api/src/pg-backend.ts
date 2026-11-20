@@ -77,6 +77,53 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
     await flush();
   }
 
+  /**
+   * 저장소 전체 읽기. 같은 순간(같은 마이크로태스크)에 읽는 저장소는 쿼리 하나로 묶고(`Promise.all`로 여러
+   * 저장소를 읽는 화면), 저장소마다 문서를 배열 하나(`jsonb_agg`)로 받습니다. Workers의 pg 드라이버는 행마다,
+   * 쿼리마다, 동시에 여는 연결(풀 최대 3개)마다 CPU가 들어 운영에서 대시보드(저장소 7개)가 24ms를 썼습니다.
+   * 묶음은 실행기(트랜잭션 안이면 그 연결)마다 따로 모읍니다. 순서는 지금처럼 정하지 않습니다(필요한 곳에서 정렬).
+   */
+  type Waiter = { resolve: (docs: unknown[]) => void; reject: (error: unknown) => void };
+  const batches = new Map<SqlExecutor, Map<StoreName, Waiter[]>>();
+
+  function readAll(executor: SqlExecutor, store: StoreName): Promise<unknown[]> {
+    let batch = batches.get(executor);
+    if (!batch) {
+      const created = new Map<StoreName, Waiter[]>();
+      batches.set(executor, created);
+      // queueMicrotask 대신 Promise로 이어 둡니다. Worker는 요청마다의 DB 연결을 AsyncLocalStorage로 찾는데,
+      // 그 문맥은 Promise 이어 달기로 넘어가는 것이 운영에서 확인된 방식입니다.
+      void Promise.resolve().then(() => {
+        batches.delete(executor);
+        return flushReads(executor, created);
+      });
+      batch = created;
+    }
+    const waiters = batch.get(store) ?? [];
+    batch.set(store, waiters);
+    return new Promise((resolve, reject) => waiters.push({ resolve, reject }));
+  }
+
+  async function flushReads(executor: SqlExecutor, batch: Map<StoreName, Waiter[]>) {
+    try {
+      const { rows } = await executor.query<{ store: StoreName; data: unknown[] }>(
+        `select store, jsonb_agg(data) as data from docs
+         where store = any($1::text[]) group by store`,
+        [[...batch.keys()]],
+      );
+      const found = new Map(rows.map((row) => [row.store, row.data]));
+      for (const [store, waiters] of batch) {
+        const docs = found.get(store) ?? [];
+        // 같은 저장소를 함께 읽은 곳이 여럿이면 서로의 배열을 고치지 않게 두 번째부터 복사본을 줍니다.
+        waiters.forEach((waiter, index) =>
+          waiter.resolve(index === 0 ? docs : structuredClone(docs)),
+        );
+      }
+    } catch (error) {
+      for (const waiters of batch.values()) for (const waiter of waiters) waiter.reject(error);
+    }
+  }
+
   const storage: Storage = {
     async get<T>(store: StoreName, id: string) {
       const { rows } = await exec().query<{ data: T }>(
@@ -93,15 +140,8 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
       );
       return rows.map((row) => row.data);
     },
-    async all<T>(store: StoreName) {
-      // 문서마다 행 하나로 받지 않고 DB에서 배열 하나(행 하나)로 묶어 받습니다. Workers의 pg 드라이버는 행마다 드는
-      // CPU가 커서(운영 측정 행당 약 15~40µs), 행이 많은 요청(대시보드 약 1,300행)이 행 수만큼 느려졌습니다.
-      // 순서는 지금처럼 정하지 않습니다(필요한 곳에서 정렬).
-      const { rows } = await exec().query<{ data: T[] | null }>(
-        'select jsonb_agg(data) as data from docs where store = $1',
-        [store],
-      );
-      return rows[0]?.data ?? [];
+    all<T>(store: StoreName) {
+      return readAll(exec(), store) as Promise<T[]>;
     },
     async write(ops) {
       if (ops.length === 0) return;
