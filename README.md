@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-1.2.0-911a46)
+![version](https://img.shields.io/badge/version-1.3.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -70,7 +70,7 @@
 | 구성 | pnpm 워크스페이스, Turborepo, Feature-Sliced Design v2.1 (Steiger로 검사) |
 | 프레임워크 | Angular 22 (standalone, zoneless, signals, `@if`·`@for`, `@defer`, Signal Forms, `httpResource`), TypeScript 6 |
 | PWA | @angular/service-worker(SwUpdate), Web App Manifest, BarcodeDetector, Vibration API |
-| 서버·데이터 | Cloudflare Workers(정적 자산 + `/api`), Hyperdrive, Neon Postgres, node-postgres, PGlite(테스트·로컬), 브라우저 데모 서버(IndexedDB, Web Locks, BroadcastChannel) |
+| 서버·데이터 | Cloudflare Workers(정적 자산 + `/api`), Hyperdrive, Neon Postgres, node-postgres, PGlite(테스트·로컬), 브라우저 데모 서버(IndexedDB, Web Locks, BroadcastChannel), Zod 4(`zod/mini`, 요청 본문·기기 저장값·응답 스키마) |
 | 품질 | ESLint(angular-eslint, 템플릿 접근성 규칙), Prettier, husky + lint-staged, Vitest 5 + Testing Library + fake-indexeddb, Storybook 10(angular-vite) 스토리 테스트(실제 브라우저 + axe), Playwright + axe(프로덕션 빌드·배포 사이트 E2E), size-limit, Lighthouse CI |
 | 모니터링 | Sentry(DSN이 있을 때만), web-vitals (`@sog/monitoring`) |
 | 배포 | Cloudflare Workers(두 앱과 API를 한 주소로), GitHub Actions, Dependabot |

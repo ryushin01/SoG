@@ -916,3 +916,68 @@ describe('옛 시드가 남은 저장소(실제 서버)', () => {
     expect(count.status).toBe(400);
   });
 });
+
+describe('요청 본문 확인(@sog/domain 스키마)', () => {
+  it('잘못된 본문은 400과 첫 문구로 답하고, 맞으면 공백을 지운 값으로 저장한다', async () => {
+    const [server] = await tabs(1);
+    const badType = await call(server!, 'POST', '/api/movements', {
+      body: { type: 'gift', skuId: 'sku-10201', qty: 1, reason: '시험' },
+    });
+    expect([badType.status, (badType.body as { message: string }).message]).toEqual([
+      400,
+      '이동 유형을 선택해 주세요.',
+    ]);
+    const badQty = await call(server!, 'POST', '/api/movements', {
+      body: {
+        type: 'receipt',
+        skuId: 'sku-10201',
+        toLocationId: 'loc-A-01-01-1',
+        qty: 0,
+        reason: '시험',
+      },
+    });
+    expect((badQty.body as { message: string }).message).toBe(
+      '수량은(는) 1 이상의 정수여야 합니다.',
+    );
+
+    const detail = (await call(server!, 'GET', '/api/skus/sku-10201')).body as SkuDetail;
+    const blank = await call(server!, 'PATCH', '/api/skus/sku-10201', {
+      body: { name: '   ' },
+      ifMatch: detail.sku.version,
+    });
+    expect([blank.status, (blank.body as { message: string }).message]).toEqual([
+      400,
+      '품목명을(를) 입력해 주세요.',
+    ]);
+    const saved = await call(server!, 'PATCH', '/api/skus/sku-10201', {
+      body: { name: '  산업용 USB-C 케이블 1m  ', description: '  ' },
+      ifMatch: detail.sku.version,
+    });
+    expect(saved.status).toBe(200);
+    expect((saved.body as { name: string; description: string }).name).toBe(
+      '산업용 USB-C 케이블 1m',
+    );
+    expect((saved.body as { description: string }).description).toBe('');
+
+    const noLines = await call(server!, 'POST', '/api/orders', {
+      body: {
+        customer: '시험유통',
+        assigneeId: 'u-lee',
+        dueAt: new Date().toISOString(),
+        lines: [],
+      },
+    });
+    expect((noLines.body as { message: string }).message).toBe('품목을 하나 이상 넣어 주세요.');
+  });
+
+  it('로그인 본문이 맞지 않으면 계정 문구와 같은 401로 답한다', async () => {
+    const [server] = await tabs(1);
+    for (const body of [null, { userId: 'u-kim', password: 1234 }, { userId: ['u-kim'] }]) {
+      const response = await call(server!, 'POST', '/api/auth/login', { body, user: null });
+      expect([response.status, (response.body as { message: string }).message]).toEqual([
+        401,
+        '계정이나 비밀번호가 맞지 않습니다.',
+      ]);
+    }
+  });
+});

@@ -1,7 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, InjectionToken, signal } from '@angular/core';
-import type { LoginResponse, User } from '@sog/domain';
+import { check, loginResponseSchema, type LoginResponse, type User } from '@sog/domain';
 import { firstValueFrom } from 'rxjs';
+import { readStored } from './stored';
 
 /**
  * 토큰을 둘 곳.
@@ -29,14 +30,10 @@ function storageOf(kind: 'session' | 'local'): Storage | null {
   }
 }
 
+/** 기기에 남은 로그인. 깨졌거나 옛 형식이면(스키마) 없는 것으로, 만료됐으면 로그아웃 상태로 봅니다. */
 function read(kind: 'session' | 'local'): Stored | null {
-  try {
-    const raw = storageOf(kind)?.getItem(KEY);
-    const value = raw ? (JSON.parse(raw) as Stored) : null;
-    return value && value.expiresAt * 1000 > Date.now() ? value : null;
-  } catch {
-    return null;
-  }
+  const value = readStored(() => storageOf(kind), KEY, loginResponseSchema());
+  return value && value.expiresAt * 1000 > Date.now() ? value : null;
 }
 
 /** 로그인 상태. 인터셉터가 토큰을 Authorization 헤더로 붙입니다. */
@@ -53,9 +50,14 @@ export class AuthSession {
   readonly notice = signal<string | null>(null);
 
   async login(userId: string, password: string): Promise<User> {
-    const response = await firstValueFrom(
+    const raw = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/login', { userId, password }),
     );
+    // 응답 모양이 다르면(배포가 엇갈린 서버 등) 기기에 남기지 않고 실패로 알립니다.
+    const checked = check(loginResponseSchema(), raw);
+    if (!checked.ok)
+      throw new Error('로그인 응답을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
+    const response = checked.value;
     this.save({ token: response.token, expiresAt: response.expiresAt, user: response.user });
     this.notice.set(null);
     return response.user;

@@ -1,3 +1,6 @@
+import { reloadMarkSchema } from '@sog/domain';
+import { readStored } from './stored';
+
 const KEY = 'sog:chunk-reload';
 /** 같은 주소를 방금 새로 열었는데도 실패하면 되풀이하지 않습니다(정말로 없는 파일이면 무한 새로 고침이 됨). */
 const RETRY_WINDOW_MS = 10_000;
@@ -24,10 +27,7 @@ export function reloadOnStaleChunk(
   if (!isChunkLoadError(event.error) || typeof document === 'undefined') return;
   const target = new URL(event.url.replace(/^\//, ''), document.baseURI).href;
   try {
-    const last = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as {
-      url: string;
-      at: number;
-    } | null;
+    const last = readStored(() => sessionStorage, KEY, reloadMarkSchema());
     if (last && last.url === target && Date.now() - last.at < RETRY_WINDOW_MS) return;
     sessionStorage.setItem(KEY, JSON.stringify({ url: target, at: Date.now() }));
   } catch {

@@ -1,4 +1,5 @@
 /** 응답 만들기, 경로 맞추기, 쿼리·본문 값 검사 */
+import { check, type Schema } from '@sog/domain';
 import { HttpError, type ServerResponse } from './types';
 
 export function json(
@@ -71,4 +72,11 @@ export function text(value: unknown, label: string, max = 200, required = true):
   if (trimmed.length > max)
     throw new HttpError(400, 'VALIDATION', `${label}은(는) ${max}자 이내로 입력해 주세요.`);
   return trimmed;
+}
+
+/** 요청 본문을 스키마로 확인합니다(@sog/domain의 schemas). 맞지 않으면 400과 첫 문구로 답합니다. */
+export function parseBody<T>(schema: Schema<T>, body: unknown): T {
+  const result = check(schema, body ?? {});
+  if (!result.ok) throw new HttpError(400, 'VALIDATION', result.message);
+  return result.value;
 }

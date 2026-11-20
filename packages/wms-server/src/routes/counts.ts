@@ -5,12 +5,11 @@ import {
   type ActivityKind,
   type CountLine,
   type CountTask,
-  type CreateCountRequest,
   type Movement,
   type Sku,
-  type SubmitCountLineRequest,
 } from '@sog/domain';
-import { json, positiveInt, row, text } from '../core/http';
+import { createCountRequestSchema, submitCountLineRequestSchema } from '@sog/domain/requests';
+import { json, parseBody, row } from '../core/http';
 import type { Mutate } from '../core/mutate';
 import type { ServerScope } from '../core/scope';
 import {
@@ -22,23 +21,18 @@ import {
 } from '../core/types';
 import type { Views } from '../core/views';
 import type { WriteOp } from '../idb';
-import { ZONES } from '../seed';
 
 export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): Route[] {
   const { db, load, mustGet, newId, now, requireAssignee, requireVersion, touch } = scope;
   const { lineView, netMoved, taskDetail, taskSummary } = views;
 
-  async function createCount(ctx: Context, request: CreateCountRequest): Promise<MutationResult> {
-    const title = text(request?.title, '작업 이름', 60);
-    if (!ZONES.some((zone) => zone.code === request.zone))
-      throw new HttpError(400, 'VALIDATION', '구역을 선택해 주세요.');
+  async function createCount(ctx: Context, body: unknown): Promise<MutationResult> {
+    const request = parseBody(createCountRequestSchema(), body);
+    const { title } = request;
     const assignee = (await load.users()).find(
       (user) => user.id === request.assigneeId && user.role === 'operator',
     );
     if (!assignee) throw new HttpError(400, 'VALIDATION', '담당 작업자를 선택해 주세요.');
-    if (!request.dueAt || Number.isNaN(Date.parse(request.dueAt))) {
-      throw new HttpError(400, 'VALIDATION', '마감일을 입력해 주세요.');
-    }
     const [locations, stocks, counts, lines] = await Promise.all([
       load.locations(),
       load.stocks(),
@@ -95,7 +89,7 @@ export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
       zone: request.zone,
       assigneeId: assignee.id,
       status: 'open',
-      blind: Boolean(request.blind),
+      blind: request.blind,
       dueAt: new Date(request.dueAt).toISOString(),
       createdAt: at,
       createdBy: ctx.user.id,
@@ -187,7 +181,7 @@ export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
     ctx: Context,
     taskId: string,
     lineId: string,
-    request: SubmitCountLineRequest,
+    body: unknown,
   ): Promise<MutationResult> {
     const task = await mustGet<CountTask>('counts', taskId, '실사 작업');
     const line = await mustGet<CountLine>('countLines', lineId, '실사 항목');
@@ -204,8 +198,7 @@ export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
       );
     }
     await requireVersion(ctx, line, current);
-    const countedQty = positiveInt(request.countedQty, '센 수량', true);
-    const note = text(request.note ?? '', '메모', 120, false);
+    const { countedQty, note = '' } = parseBody(submitCountLineRequestSchema(), body);
     const at = now().toISOString();
     const next = touch(
       {
@@ -398,11 +391,7 @@ export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
         return json(200, detail, detail.task.version);
       },
     ],
-    [
-      'POST',
-      '/api/counts',
-      (ctx) => mutate(ctx, 'counts', () => createCount(ctx, ctx.body as CreateCountRequest)),
-    ],
+    ['POST', '/api/counts', (ctx) => mutate(ctx, 'counts', () => createCount(ctx, ctx.body))],
     [
       'POST',
       '/api/counts/:id/start',
@@ -463,9 +452,7 @@ export function countRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
       'PUT',
       '/api/counts/:id/lines/:lineId',
       (ctx, { id, lineId }) =>
-        mutate(ctx, `line:${lineId}`, () =>
-          submitLine(ctx, id!, lineId!, (ctx.body ?? {}) as SubmitCountLineRequest),
-        ),
+        mutate(ctx, `line:${lineId}`, () => submitLine(ctx, id!, lineId!, ctx.body)),
     ],
     [
       'POST',

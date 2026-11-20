@@ -3,14 +3,13 @@ import {
   allocate,
   available,
   ORDER_STATUS_LABEL,
-  type CreateOrderRequest,
   type Movement,
-  type PickRequest,
   type ShipmentOrder,
   type Sku,
   type StockLevel,
 } from '@sog/domain';
-import { json, positiveInt, row, text } from '../core/http';
+import { createOrderRequestSchema, pickRequestSchema } from '@sog/domain/requests';
+import { json, parseBody, positiveInt, row } from '../core/http';
 import type { Mutate } from '../core/mutate';
 import type { ServerScope } from '../core/scope';
 import { HttpError, type Context, type MutationResult, type Route } from '../core/types';
@@ -21,21 +20,14 @@ export function orderRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
   const { db, load, mustGet, newId, now, requireAssignee, requireVersion, touch } = scope;
   const { orderDetail, orderSummary } = views;
 
-  async function createOrder(ctx: Context, request: CreateOrderRequest): Promise<MutationResult> {
-    const customer = text(request?.customer, '고객사', 40);
+  async function createOrder(ctx: Context, body: unknown): Promise<MutationResult> {
+    const request = parseBody(createOrderRequestSchema(), body);
+    const { customer } = request;
     const users = await load.users();
     const assignee = users.find(
       (user) => user.id === request.assigneeId && user.role === 'operator',
     );
     if (!assignee) throw new HttpError(400, 'VALIDATION', '피킹 작업자를 선택해 주세요.');
-    if (!request.dueAt || Number.isNaN(Date.parse(request.dueAt))) {
-      throw new HttpError(400, 'VALIDATION', '출고 마감을 입력해 주세요.');
-    }
-    if (!Array.isArray(request.lines) || request.lines.length === 0) {
-      throw new HttpError(400, 'VALIDATION', '품목을 하나 이상 넣어 주세요.');
-    }
-    if (request.lines.length > 20)
-      throw new HttpError(400, 'VALIDATION', '품목은 20개까지 넣을 수 있습니다.');
     const ids = request.lines.map((line) => line.skuId);
     if (new Set(ids).size !== ids.length)
       throw new HttpError(400, 'VALIDATION', '같은 품목이 두 번 들어 있습니다.');
@@ -138,7 +130,7 @@ export function orderRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
     ctx: Context,
     orderId: string,
     allocationId: string,
-    request: PickRequest,
+    body: unknown,
   ): Promise<MutationResult> {
     const order = await mustGet<ShipmentOrder>('orders', orderId, '출고 지시');
     requireAssignee(ctx, order.assigneeId);
@@ -155,7 +147,7 @@ export function orderRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
     const allocation = line?.allocations.find((a) => a.id === allocationId);
     if (!line || !allocation)
       throw new HttpError(404, 'NOT_FOUND', '피킹 항목을 찾을 수 없습니다.');
-    const pickedQty = positiveInt(request.pickedQty, '집은 수량', true);
+    const { pickedQty, note = '' } = parseBody(pickRequestSchema(), body);
     if (pickedQty > allocation.qty) {
       throw new HttpError(
         400,
@@ -163,7 +155,6 @@ export function orderRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
         `할당된 ${allocation.qty}개보다 많이 집을 수 없습니다.`,
       );
     }
-    const note = text(request.note ?? '', '메모', 100, false);
     if (pickedQty < allocation.qty && !note) {
       throw new HttpError(400, 'VALIDATION', '덜 집었으면 사유를 적어 주세요.');
     }
@@ -352,17 +343,13 @@ export function orderRoutes(scope: ServerScope, views: Views, mutate: Mutate): R
         return json(200, detail, detail.order.version);
       },
     ],
-    [
-      'POST',
-      '/api/orders',
-      (ctx) => mutate(ctx, 'orders', () => createOrder(ctx, ctx.body as CreateOrderRequest)),
-    ],
+    ['POST', '/api/orders', (ctx) => mutate(ctx, 'orders', () => createOrder(ctx, ctx.body))],
     [
       'PUT',
       '/api/orders/:id/allocations/:allocationId',
       (ctx, { id, allocationId }) =>
         mutate(ctx, `pick:${allocationId}`, () =>
-          pickAllocation(ctx, id!, allocationId!, (ctx.body ?? {}) as PickRequest),
+          pickAllocation(ctx, id!, allocationId!, ctx.body),
         ),
     ],
     [
