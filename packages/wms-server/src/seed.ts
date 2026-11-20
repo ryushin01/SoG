@@ -2,6 +2,7 @@
 import {
   allocate,
   ean13CheckDigit,
+  stockStatus,
   type Activity,
   type CountLine,
   type CountTask,
@@ -14,10 +15,12 @@ import {
   type SkuCategory,
   type SkuShape,
   type StockLevel,
+  type StockStatus,
   type User,
   type Zone,
   type ZoneCode,
 } from '@sog/domain';
+import { alertMessage, STATUS_RANK } from './core/alerts';
 
 export interface SeedData {
   users: User[];
@@ -446,6 +449,15 @@ export function createSeed(now: Date): SeedData {
   }
   const skuOf = (id: string) => skus.find((sku) => sku.id === id)!;
   const stockOf = (id: string) => stocks.find((stock) => stock.id === id)!;
+  /** 품목의 지금 상태(모든 로케이션 보유 합과 안전 재고) */
+  const statusOf = (skuId: string) => {
+    const onHand = stocks
+      .filter((stock) => stock.skuId === skuId)
+      .reduce((sum, stock) => sum + stock.onHand, 0);
+    return { onHand, status: stockStatus(onHand, skuOf(skuId).safetyStock) };
+  };
+  const snapshot = (skuIds: Iterable<string>) =>
+    new Map<string, StockStatus>([...new Set(skuIds)].map((id) => [id, statusOf(id).status]));
 
   const movements: Movement[] = [];
   const history: HistoryEntry[] = [];
@@ -455,6 +467,20 @@ export function createSeed(now: Date): SeedData {
   let ac = 1;
   const log = (entry: Omit<Activity, 'id'>) =>
     activity.push({ id: `ac-${pad(ac++, 4)}`, ...entry });
+  /** 쓰기 전(before)보다 상태가 나빠진 품목마다 서버와 같은 안전 재고 알림을 남깁니다. */
+  const alertWorse = (before: Map<string, StockStatus>, at: string, by: string) => {
+    for (const [skuId, was] of before) {
+      const { onHand, status } = statusOf(skuId);
+      if (status === 'ok' || STATUS_RANK[status] <= STATUS_RANK[was]) continue;
+      log({
+        kind: status === 'out' ? 'stock.out' : 'stock.low',
+        message: alertMessage(status, skuOf(skuId), onHand),
+        at,
+        by,
+        target: `/inventory/${skuId}`,
+      });
+    }
+  };
 
   // 최근 60일 입출고 기록(관리자가 백오피스에서 남긴 것). 마지막 40건은 활동 기록에도 남습니다.
   const manual: Movement[] = [];
@@ -623,6 +649,7 @@ export function createSeed(now: Date): SeedData {
     if (approvedAt) {
       // 승인: 차이를 재고에 반영하고 실사 반영 기록과 재고 변경 이력을 남깁니다(서버의 승인과 같은 모양).
       const diffs = counted.filter((line) => line.countedQty !== line.expectedQty);
+      const beforeApproval = snapshot(diffs.map((line) => line.skuId));
       const message = `${nameOf(approverId)}님이 ${code}을(를) 승인해 ${diffs.length}건의 차이를 재고에 반영했습니다.`;
       for (const line of diffs) {
         const stock = stockOf(line.stockId);
@@ -666,6 +693,7 @@ export function createSeed(now: Date): SeedData {
         by: approverId,
         target: `/counts/${id}`,
       });
+      alertWorse(beforeApproval, approvedAt, approverId);
     }
 
     const transitions = [startedAt && counted.length > 0, submittedAt, approvedAt, cancelledAt];
@@ -732,6 +760,7 @@ export function createSeed(now: Date): SeedData {
       field === 'safetyStock' ? before + pick([10, 20]) : Math.round((before * 1.08) / 100) * 100;
     const at = workday(daysAgo, int(9, 17));
     const message = `${nameOf(by)}님이 ${sku.name} 정보를 수정했습니다.`;
+    const beforeEdit = snapshot([sku.id]);
     sku[field] = after;
     sku.version += 1;
     sku.updatedAt = at;
@@ -750,6 +779,7 @@ export function createSeed(now: Date): SeedData {
       blocked: false,
     });
     log({ kind: 'sku.updated', message, at, by, target: `/inventory/${sku.id}` });
+    alertWorse(beforeEdit, at, by);
   }
 
   // 출고 지시: 예약, 피킹 중, 피킹 완료, 출고 완료, 취소
@@ -848,6 +878,7 @@ export function createSeed(now: Date): SeedData {
       // 출고 확정: 집은 수량만큼 재고가 줄고 출고 기록과 재고 변경 이력이 남습니다(서버의 출고 확정과 같은 모양).
       // 뒤에 만드는 출고 지시는 줄어든 재고에서 할당합니다.
       const message = `박도윤님이 ${code}을(를) 출고했습니다.`;
+      const beforeShipment = snapshot(lines.map((line) => line.skuId));
       for (const line of lines) {
         for (const allocation of line.allocations) {
           const shipped = allocation.pickedQty ?? allocation.qty;
@@ -886,6 +917,7 @@ export function createSeed(now: Date): SeedData {
         }
       }
       log({ kind: 'order.shipped', message, at: shippedAt, by: 'u-park', target: `/orders/${id}` });
+      alertWorse(beforeShipment, shippedAt, 'u-park');
     }
     if (cancelledAt) {
       log({
@@ -914,6 +946,95 @@ export function createSeed(now: Date): SeedData {
       updatedAt: closedAt ?? (pickedLines > 0 ? pickedAt(pickedLines - 1) : createdAt),
       updatedBy: closedAt || pickedLines === 0 ? 'u-park' : assigneeId,
     });
+  }
+
+  // 안전 재고 알림 장면 둘(난수를 쓰지 않고 데이터로 고름. 실사·출고 지시와 겹치지 않는 품목).
+  // 1) 입고관리팀이 냉장식품 한 품목의 안전 재고를 보유보다 높게 고쳐 부족 알림이 남음
+  const edited = new Set(edits.map(([index]) => skus[index]!.id));
+  const tight = skus
+    .filter((sku) => sku.category === 'chilled' && !edited.has(sku.id) && !usedSkus.has(sku.id))
+    .map((sku) => ({ sku, ...statusOf(sku.id) }))
+    .filter((item) => item.status === 'ok' && item.onHand > 0)
+    .sort((a, b) => a.onHand - b.onHand || a.sku.id.localeCompare(b.sku.id))[0];
+  if (tight) {
+    const { sku } = tight;
+    const at = workday(1, 11, 20);
+    const before = sku.safetyStock;
+    const after = Math.ceil((tight.onHand + 5) / 10) * 10;
+    const message = `서예린님이 ${sku.name} 정보를 수정했습니다.`;
+    const beforeEdit = snapshot([sku.id]);
+    sku.safetyStock = after;
+    sku.version += 1;
+    sku.updatedAt = at;
+    sku.updatedBy = 'u-seo';
+    history.push({
+      id: `hi-${pad(hi++, 4)}`,
+      kind: 'sku',
+      docId: sku.id,
+      skuId: sku.id,
+      version: sku.version,
+      at,
+      by: 'u-seo',
+      reason: message,
+      locationCode: null,
+      changes: [{ field: 'safetyStock', label: '안전 재고', before, after }],
+      blocked: false,
+    });
+    log({ kind: 'sku.updated', message, at, by: 'u-seo', target: `/inventory/${sku.id}` });
+    alertWorse(beforeEdit, at, 'u-seo');
+  }
+  // 2) 어제 냉동식품 한 품목을 유통기한 경과로 모두 폐기해 품절 알림이 남음(로케이션 한 곳, 예약 없음)
+  const spoiled = skus
+    .filter((sku) => sku.category === 'frozen' && !usedSkus.has(sku.id))
+    .map((sku) => ({ sku, own: stocks.filter((stock) => stock.skuId === sku.id) }))
+    .filter(
+      ({ own }) =>
+        own.length === 1 &&
+        own[0]!.reserved === 0 &&
+        own[0]!.onHand > 0 &&
+        !busyStocks.has(own[0]!.id),
+    )
+    .sort((a, b) => a.own[0]!.onHand - b.own[0]!.onHand || a.sku.id.localeCompare(b.sku.id))[0];
+  if (spoiled) {
+    const { sku } = spoiled;
+    const stock = spoiled.own[0]!;
+    const at = workday(1, 15, 40);
+    const was = stock.onHand;
+    const code = locationOf(stock.locationId).code;
+    const message = `김하늘님이 ${sku.name}(${code}) 재고를 ${was} → 0${sku.unit}로 조정했습니다.`;
+    const beforeAdjust = snapshot([sku.id]);
+    stock.onHand = 0;
+    stock.version += 1;
+    stock.updatedAt = at;
+    stock.updatedBy = 'u-kim';
+    movements.push({
+      id: `mv-${pad(mv, 5)}`,
+      type: 'adjustment',
+      skuId: sku.id,
+      fromLocationId: null,
+      toLocationId: stock.locationId,
+      qty: was,
+      delta: -was,
+      reason: '유통기한 경과 폐기',
+      ref: null,
+      at,
+      by: 'u-kim',
+    });
+    history.push({
+      id: `hi-${pad(hi, 4)}`,
+      kind: 'stock',
+      docId: stock.id,
+      skuId: sku.id,
+      version: stock.version,
+      at,
+      by: 'u-kim',
+      reason: message,
+      locationCode: code,
+      changes: [{ field: 'onHand', label: '보유', before: was, after: 0 }],
+      blocked: false,
+    });
+    log({ kind: 'movement', message, at, by: 'u-kim', target: `/inventory/${sku.id}` });
+    alertWorse(beforeAdjust, at, 'u-kim');
   }
 
   for (const movement of manual.slice(-40)) {

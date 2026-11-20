@@ -27,6 +27,11 @@ export const routes: Routes = [
         loadComponent: () => import('@/pages/sku-detail').then((m) => m.SkuDetailPage),
       },
       {
+        path: 'labels',
+        title: '바코드 라벨',
+        loadComponent: () => import('@/pages/labels').then((m) => m.LabelsPage),
+      },
+      {
         path: 'counts',
         title: '재고 실사',
         loadComponent: () => import('@/pages/counts').then((m) => m.CountsPage),

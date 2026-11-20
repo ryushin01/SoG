@@ -442,6 +442,33 @@ textarea {
   gap: 0.75rem;
 }
 
+/* ---------- 인쇄(바코드 라벨) ----------
+   라벨 화면(body.print-labels)은 메뉴·상단 막대·알림을 감추고 본문만 종이에 냅니다.
+   셸 스타일은 컴포넌트 범위라 여기서 body 선택자로 한 단계 더 구체적으로 덮습니다. */
+@media print {
+  body.print-labels {
+    background: #fff;
+    color: #000;
+  }
+
+  body.print-labels .skip,
+  body.print-labels .side,
+  body.print-labels .bar,
+  body.print-labels sog-toast-outlet {
+    display: none;
+  }
+
+  body.print-labels .frame {
+    display: block;
+    min-height: 0;
+    background: none;
+  }
+
+  body.print-labels .main {
+    padding: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -26,6 +26,7 @@ const GROUPS: { value: ActivityGroup; label: string }[] = [
   { value: 'count', label: '재고 실사' },
   { value: 'order', label: '출고 지시' },
   { value: 'sku', label: '정보 수정' },
+  { value: 'stock', label: '재고 알림' },
   { value: 'conflict', label: '막아 낸 충돌' },
 ];
 

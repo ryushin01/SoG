@@ -158,6 +158,10 @@ export type ActivityKind =
   | 'order.picked'
   | 'order.shipped'
   | 'order.cancelled'
+  /** 안전 재고 알림: 쓰기 하나로 품목이 정상 → 부족이 됨 */
+  | 'stock.low'
+  /** 안전 재고 알림: 품목의 모든 로케이션 재고가 0이 됨 */
+  | 'stock.out'
   | 'conflict';
 
 export interface Activity {

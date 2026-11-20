@@ -121,8 +121,9 @@ describe('창고 도면', () => {
 
   it('마지막 수량까지 출고해 0이 된 로케이션은 비어 있음이 아니라 품절로 표시한다', async () => {
     const [server] = await tabs(1);
-    const list = (await call(server!, 'GET', '/api/skus?size=100')).body as Page<SkuSummary>;
-    // 로케이션 한 곳에만 있는 품목을 골라 그 재고를 모두 출고합니다.
+    const list = (await call(server!, 'GET', `/api/skus?size=${SKU_PAGE_MAX}`))
+      .body as Page<SkuSummary>;
+    // 로케이션 한 곳에만 있는 품목을 골라 그 재고를 모두 출고합니다(품목 전체에서 찾음).
     for (const sku of list.items) {
       const detail = (await call(server!, 'GET', `/api/skus/${sku.id}`)).body as SkuDetail;
       if (
@@ -979,5 +980,90 @@ describe('요청 본문 확인(@sog/domain 스키마)', () => {
         '계정이나 비밀번호가 맞지 않습니다.',
       ]);
     }
+  });
+});
+
+describe('안전 재고 알림', () => {
+  /** 로케이션 한 곳에만 있고 예약이 없는, 상태가 정상인 품목 */
+  async function singleStockSku(server: WmsServer) {
+    const list = (await call(server, 'GET', '/api/skus?size=500&status=ok'))
+      .body as Page<SkuSummary>;
+    for (const sku of list.items) {
+      const detail = (await call(server, 'GET', `/api/skus/${sku.id}`)).body as SkuDetail;
+      const [stock, ...rest] = detail.stocks;
+      if (stock && rest.length === 0 && stock.reserved === 0 && detail.sku.safetyStock > 1) {
+        return { detail, stock };
+      }
+    }
+    throw new Error('알맞은 품목이 없습니다.');
+  }
+
+  it('재고를 줄여 정상 → 부족, 부족 → 품절이 되면 활동 기록과 alerts 이벤트로 알리고, 그대로면 알리지 않는다', async () => {
+    const [server] = await tabs(1);
+    const events: ChangeEvent[] = [];
+    server!.subscribe((event) => events.push(event));
+    const { detail, stock } = await singleStockSku(server!);
+    const { sku } = detail;
+
+    const low = await call(server!, 'POST', `/api/stocks/${stock.id}/adjust`, {
+      body: { onHand: sku.safetyStock - 1, reason: '파손 폐기' },
+      ifMatch: stock.version,
+    });
+    expect(low.status).toBe(200);
+    const alert = events.find((event) => event.topics.includes('alerts'));
+    expect(alert?.topics).toEqual(['alerts', `skus/${sku.id}`]);
+    expect(alert?.message).toBe(
+      `${sku.name} 재고가 안전 재고 아래로 떨어졌습니다(보유 ${sku.safetyStock - 1}${sku.unit} · 안전 재고 ${sku.safetyStock}${sku.unit}).`,
+    );
+
+    // 부족 → 부족(더 줄었지만 품절은 아님)은 알리지 않습니다.
+    events.length = 0;
+    const lower = await call(server!, 'POST', `/api/stocks/${stock.id}/adjust`, {
+      body: { onHand: 1, reason: '파손 폐기' },
+      ifMatch: (low.body as StockLevel).version,
+    });
+    expect(lower.status).toBe(200);
+    expect(events.some((event) => event.topics.includes('alerts'))).toBe(false);
+
+    const out = await call(server!, 'POST', `/api/stocks/${stock.id}/adjust`, {
+      body: { onHand: 0, reason: '유통기한 경과 폐기' },
+      ifMatch: (lower.body as StockLevel).version,
+    });
+    expect(out.status).toBe(200);
+    expect(events.find((event) => event.topics.includes('alerts'))?.message).toBe(
+      `${sku.name} 재고가 모두 떨어졌습니다(품절, 안전 재고 ${sku.safetyStock}${sku.unit}).`,
+    );
+
+    const feed = (await call(server!, 'GET', '/api/activity?kind=stock&limit=10')).body as {
+      items: { kind: string; target: string }[];
+    };
+    expect(feed.items.slice(0, 2).map((item) => item.kind)).toEqual(['stock.out', 'stock.low']);
+    expect(feed.items[0]!.target).toBe(`/inventory/${sku.id}`);
+  });
+
+  it('안전 재고를 보유보다 높이면 부족 알림, 입고로 늘면 알리지 않는다', async () => {
+    const [server] = await tabs(1);
+    const events: ChangeEvent[] = [];
+    server!.subscribe((event) => events.push(event));
+    const { detail, stock } = await singleStockSku(server!);
+    const raised = await call(server!, 'PATCH', `/api/skus/${detail.sku.id}`, {
+      body: { safetyStock: stock.onHand + 10 },
+      ifMatch: detail.sku.version,
+    });
+    expect(raised.status).toBe(200);
+    expect(events.filter((event) => event.topics.includes('alerts'))).toHaveLength(1);
+
+    events.length = 0;
+    const receipt = await call(server!, 'POST', '/api/movements', {
+      body: {
+        type: 'receipt',
+        skuId: detail.sku.id,
+        toLocationId: stock.locationId,
+        qty: 3,
+        reason: '정기 입고',
+      },
+    });
+    expect(receipt.status).toBe(201);
+    expect(events.some((event) => event.topics.includes('alerts'))).toBe(false);
   });
 });

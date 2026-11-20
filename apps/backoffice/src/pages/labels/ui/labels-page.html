@@ -1,0 +1,94 @@
+<nav class="crumbs" aria-label="현재 위치">
+  <ol>
+    <li><a routerLink="/inventory" [queryParams]="backParams()">재고</a></li>
+    @if (single(); as sku) {
+      <li>
+        <a [routerLink]="['/inventory', sku.id]">{{ sku.name }}</a>
+      </li>
+    }
+    <li aria-current="page">바코드 라벨</li>
+  </ol>
+</nav>
+
+<sog-page-header
+  index="01"
+  label="LABELS"
+  heading="바코드 라벨"
+  description="EAN-13 바코드와 품목 이름·코드를 라벨로 인쇄합니다. 현장 앱 카메라와 산업용 스캐너로 그대로 읽습니다."
+>
+  <button
+    type="button"
+    class="btn btn--primary"
+    [disabled]="labels().length === 0"
+    (click)="print()"
+  >
+    인쇄
+  </button>
+</sog-page-header>
+
+<section class="settings" aria-labelledby="label-settings">
+  <h2 id="label-settings" class="visually-hidden">라벨 설정</h2>
+  <div class="field settings__layout">
+    <label class="field__label" for="label-layout">라벨 크기</label>
+    <select id="label-layout" class="select" (change)="setLayout(value($event))">
+      @for (layout of layouts; track layout.value) {
+        <option [value]="layout.value" [selected]="layout.value === layoutChoice()">
+          {{ layout.label }}
+        </option>
+      }
+    </select>
+  </div>
+  <div class="field settings__copies">
+    <label class="field__label" for="label-copies">품목당 장수</label>
+    <input
+      #copiesInput
+      id="label-copies"
+      class="input"
+      type="number"
+      inputmode="numeric"
+      min="1"
+      [max]="maxCopies"
+      [value]="copiesChoice()"
+      aria-describedby="label-copies-hint"
+      (change)="setCopies(copiesInput)"
+    />
+    <p id="label-copies-hint" class="field__hint">1~{{ maxCopies }}장</p>
+  </div>
+  <p class="settings__summary" role="status">
+    품목 {{ items().length }}개 · 라벨 {{ labels().length }}장
+    @if (layoutChoice() === 'sheet') {
+      · A4 {{ pages() }}쪽
+    }
+  </p>
+</section>
+
+@if (list.error()) {
+  <sog-state-message
+    kind="error"
+    message="품목을 불러오지 못했습니다. 연결을 확인해 주세요."
+    (retry)="list.reload()"
+  />
+} @else if (!list.hasValue()) {
+  <sog-state-message message="라벨을 준비하는 중입니다." />
+} @else if (items().length === 0) {
+  <sog-state-message
+    kind="empty"
+    message="라벨로 만들 품목이 없습니다. 재고 화면에서 필터를 바꿔 보세요."
+  />
+} @else {
+  <!-- 미리보기는 실제 크기라 좁은 화면에서는 가로로 스크롤합니다. 키보드로도 스크롤하게 초점을 받습니다. -->
+  <section class="preview" aria-labelledby="label-preview" tabindex="0">
+    <h2 id="label-preview" class="visually-hidden">라벨 미리보기</h2>
+    <ol class="sheet" [class.sheet--roll]="layoutChoice() === 'roll'">
+      @for (label of labels(); track label.key) {
+        <li class="label">
+          <p class="label__name">{{ label.sku.name }}</p>
+          <p class="label__meta">
+            {{ label.sku.code }} · {{ categoryLabel[label.sku.category] }} · {{ label.sku.unit }}
+          </p>
+          <sog-sku-barcode class="label__barcode" [code]="label.sku.barcode" />
+        </li>
+      }
+    </ol>
+  </section>
+}
