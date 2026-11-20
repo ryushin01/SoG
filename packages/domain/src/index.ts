@@ -1,5 +1,6 @@
 export type * from './api';
 export * from './art';
+export * from './barcode';
 export * from './rules';
 export * from './schemas';
 export type * from './types';

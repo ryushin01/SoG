@@ -5,6 +5,7 @@ import { Toaster } from '@/shared/ui';
 /**
  * 다른 탭(다른 사용자, 실사 앱)의 변경을 알림으로 보여 주고, 실시간 표시등을 깜빡입니다.
  * 같은 탭에서 한 변경은 각 화면이 직접 안내하므로 건너뜁니다.
+ * 안전 재고 알림(주제 alerts)은 내가 한 변경이어도 보여 주고, 그 품목으로 가는 링크를 붙입니다.
  */
 @Component({
   selector: 'sog-remote-change-notifier',
@@ -58,6 +59,15 @@ export class RemoteChangeNotifier {
       this.pulse.set(true);
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.pulse.set(false), 1200);
+    });
+    this.host.onChange(['alerts'], (event) => {
+      if (!event.message) return;
+      const skuId = event.topics.find((topic) => topic.startsWith('skus/'))?.slice(5);
+      this.toaster.show(
+        event.message,
+        'warning',
+        skuId ? { commands: ['/inventory', skuId], label: '품목 보기' } : undefined,
+      );
     });
   }
 }

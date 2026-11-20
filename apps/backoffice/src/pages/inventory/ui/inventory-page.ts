@@ -100,6 +100,13 @@ export class InventoryPage {
     computation: (value, previous) => value ?? previous?.value,
   });
   protected readonly size = SIZE;
+  /** 라벨 인쇄로 넘기는 지금 필터. 빈 값(null)은 주소에서 빠집니다. */
+  protected readonly labelParams = computed(() => ({
+    q: this.qFilter() || null,
+    status: this.statusFilter() || null,
+    category: this.categoryFilter() || null,
+    zone: this.zoneFilter() || null,
+  }));
   protected readonly filtered = computed(
     () => !!(this.qFilter() || this.statusFilter() || this.categoryFilter() || this.zoneFilter()),
   );

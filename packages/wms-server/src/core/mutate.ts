@@ -1,6 +1,7 @@
 /** 쓰기 공통 처리: 쓰기 잠금, 멱등 재전송, 변경 이력·활동 기록, 변경 알림 */
 import type { Activity, HistoryEntry } from '@sog/domain';
 import type { WriteOp } from '../idb';
+import { stockAlerts } from './alerts';
 import { diff, STORE_KIND } from './history';
 import { json, row } from './http';
 import type { ServerScope } from './scope';
@@ -74,6 +75,28 @@ export function createMutate(scope: ServerScope) {
           put: row<Activity>({ id: newId('ac'), ...item, at, by: ctx.user.id }),
         });
       }
+      // 안전 재고 알림: 재고·품목을 바꾸는 쓰기는 쓰기 전 상태와 비교해 나빠진 품목을 활동 기록으로 남깁니다.
+      const touchesStock = result.ops.some(
+        (op) => 'put' in op && (op.store === 'stocks' || op.store === 'skus'),
+      );
+      const alerts = touchesStock
+        ? await Promise.all([load.stocks(), load.skus()]).then(([stocks, skus]) =>
+            stockAlerts(result.ops, stocks, skus),
+          )
+        : [];
+      for (const alert of alerts) {
+        ops.push({
+          store: 'activity',
+          put: row<Activity>({
+            id: newId('ac'),
+            kind: alert.kind,
+            message: alert.message,
+            at,
+            by: ctx.user.id,
+            target: `/inventory/${alert.skuId}`,
+          }),
+        });
+      }
       const status = result.status ?? 200;
       if (idemId) {
         ops.push({
@@ -95,6 +118,16 @@ export function createMutate(scope: ServerScope) {
         origin: ctx.origin,
         message: result.activity[0]?.message ?? '',
       });
+      // 알림은 따로 보냅니다(화면은 'alerts' 주제를 받아 내 탭·다른 탭 모두 안내).
+      for (const alert of alerts) {
+        await emit({
+          topics: ['alerts', `skus/${alert.skuId}`],
+          by: ctx.user.id,
+          at,
+          origin: ctx.origin,
+          message: alert.message,
+        });
+      }
       return json(status, result.body, result.etag);
     });
   }

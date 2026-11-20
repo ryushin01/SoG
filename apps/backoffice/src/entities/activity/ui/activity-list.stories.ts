@@ -24,6 +24,15 @@ const meta: Meta<ActivityList> = {
         target: null,
       },
       {
+        id: '4',
+        kind: 'stock.low',
+        message:
+          '샐러드 채소 500g 재고가 안전 재고 아래로 떨어졌습니다(보유 57EA · 안전 재고 70EA).',
+        at: new Date(now - 3_600_000).toISOString(),
+        by: 'u-seo',
+        target: '/inventory/sku-10703',
+      },
+      {
         id: '3',
         kind: 'movement',
         message: '김하늘님이 OPP 테이프 48mm 40ROLL을(를) C-01-02-1에 입고했습니다.',

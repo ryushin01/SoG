@@ -7,6 +7,7 @@
   <button type="button" class="btn" [disabled]="exportLock.pending()" (click)="exportCsv()">
     {{ exportLock.pending() ? '내보내는 중…' : 'CSV 내보내기' }}
   </button>
+  <a class="btn" routerLink="/labels" [queryParams]="labelParams()">라벨 인쇄</a>
   <button type="button" class="btn btn--primary" (click)="movementOpen.set(true)">
     입출고 등록
   </button>

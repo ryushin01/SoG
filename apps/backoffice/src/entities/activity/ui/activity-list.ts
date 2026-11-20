@@ -10,7 +10,11 @@ import { AgoPipe, DateTimePipe } from '@/shared/lib';
   template: `
     <ol class="feed">
       @for (item of items(); track item.id) {
-        <li class="feed__item" [class.feed__item--conflict]="item.kind === 'conflict'">
+        <li
+          class="feed__item"
+          [class.feed__item--conflict]="item.kind === 'conflict'"
+          [class.feed__item--alert]="item.kind === 'stock.low' || item.kind === 'stock.out'"
+        >
           <time class="feed__time" [attr.datetime]="item.at" [title]="item.at | dateTime">{{
             item.at | ago
           }}</time>
@@ -41,6 +45,9 @@ import { AgoPipe, DateTimePipe } from '@/shared/lib';
     }
     .feed__item--conflict .feed__msg {
       color: var(--accent);
+    }
+    .feed__item--alert .feed__msg {
+      color: var(--warn);
     }
     .feed__time {
       font-family: var(--font-mono);

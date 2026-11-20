@@ -13,6 +13,7 @@
     [description]="categoryLabel[d.sku.category] + ' · ' + d.sku.unit + ' 단위'"
   >
     <sog-stock-status-badge [status]="d.status" />
+    <a class="btn" routerLink="/labels" [queryParams]="{ sku: d.sku.id }">라벨 인쇄</a>
     <button type="button" class="btn btn--primary" (click)="movementOpen.set(true)">
       입출고 등록
     </button>

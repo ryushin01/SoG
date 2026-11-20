@@ -90,6 +90,20 @@ test('백오피스: 함께 보는 사람, 동시 수정 충돌, 변경 이력', 
   await shoot(page, 'backoffice-history');
 });
 
+test('백오피스: 바코드 라벨, 안전 재고 알림', async ({ page }) => {
+  await loginBackoffice(page, '김하늘', '/labels?category=chilled');
+  await expect(page.locator('ol.sheet > li').first()).toBeVisible();
+  await shoot(page, 'backoffice-labels');
+
+  // 보유량보다 높은 안전 재고로 바꿔 경고 알림을 띄웁니다.
+  await page.goto('/inventory/sku-10201');
+  await page.getByRole('spinbutton', { name: '안전 재고' }).fill('800');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByRole('link', { name: /^품목 보기/ })).toBeVisible();
+  await page.mouse.move(0, 0);
+  await shoot(page, 'backoffice-alert', 300);
+});
+
 test('출고 지시와 현장 피킹', async ({ page, context }) => {
   const field = await context.newPage();
   await field.setViewportSize(PHONE);

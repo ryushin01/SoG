@@ -51,7 +51,7 @@ export { HttpError, RETENTION_DAYS } from './core/types';
 
 const SEED_KEY = 'seed';
 /** 시드 구성이 바뀌면 올립니다. 데모 모드는 저장된 시드 버전이 다르면 처음 상태로 다시 채웁니다. */
-const SEED_VERSION = 4;
+const SEED_VERSION = 5;
 
 /** 사용자 목록을 기억하는 시간 */
 const USERS_CACHE_MS = 60_000;

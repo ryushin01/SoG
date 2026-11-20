@@ -203,7 +203,7 @@ export interface ActivityPage {
 }
 
 /** 활동 기록을 거르는 종류 묶음(`/api/activity?kind=`) */
-export type ActivityGroup = 'movement' | 'count' | 'order' | 'sku' | 'conflict';
+export type ActivityGroup = 'movement' | 'count' | 'order' | 'sku' | 'stock' | 'conflict';
 
 /** 다른 탭(사용자)이 데이터를 바꾸면 BroadcastChannel로 퍼지는 알림 */
 export interface ChangeEvent {
