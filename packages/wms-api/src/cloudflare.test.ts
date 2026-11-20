@@ -123,8 +123,8 @@ describe('Cloudflare Worker 진입점', () => {
     await get('/api/skus?size=1');
     const timing = (await get('/api/skus?size=1')).headers.get('server-timing') ?? '';
     expect(timing).toMatch(/^app;dur=[\d.]+, db;dur=[\d.]+;desc="\d+ queries"$/);
-    // 시드 확인·사용자 목록은 실행 환경마다 한 번이라, 두 번째 목록 요청은 쿼리 3개(품목·재고·로케이션)입니다.
-    expect(timing).toContain('desc="3 queries"');
+    // 시드 확인·사용자 목록은 실행 환경마다 한 번이고, 품목·재고·로케이션은 함께 읽어 쿼리 하나로 묶습니다.
+    expect(timing).toContain('desc="1 queries"');
   });
 
   it('정적 파일이 없는 주소: 파일처럼 생긴 주소는 404, 화면 주소는 각 앱의 첫 화면', async () => {
