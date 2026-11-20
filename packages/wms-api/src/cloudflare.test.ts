@@ -180,16 +180,45 @@ describe('Cloudflare Worker 진입점', () => {
 
   it('DEMO_RESET=off면 예약 작업이 데이터를 되돌리지 않고 보관 기간이 지난 기록만 지운다', async () => {
     const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    await expect(
-      worker.scheduled(undefined, env({ DEMO_RESET: 'off' }), ctx),
-    ).resolves.toBeUndefined();
+    const off = env({ DEMO_RESET: 'off' });
+    // 처음 요청에 스키마와 시드가 생깁니다. 그 위에 오래된·최근 기록과 오래된 업무 기록을 넣습니다.
+    expect((await get('/api/skus?size=1', off)).status).toBe(200);
+    const recent = new Date().toISOString();
+    const rows: [store: string, id: string, at: string][] = [
+      ['activity', 'ac-old', '2020-01-01T00:00:00.000Z'],
+      ['activity', 'ac-new', recent],
+      ['idempotency', 'idem-old', '2020-01-01T00:00:00.000Z'],
+      ['idempotency', 'idem-new', recent],
+      ['history', 'hi-old', '2020-01-01T00:00:00.000Z'],
+      // 업무 기록(입출고)은 오래돼도 지우지 않습니다.
+      ['movements', 'mv-old', '2020-01-01T00:00:00.000Z'],
+    ];
+    for (const [store, id, at] of rows) {
+      await pglite.query('insert into docs (store, id, data) values ($1, $2, $3::jsonb)', [
+        store,
+        id,
+        JSON.stringify({ id, at }),
+      ]);
+    }
+
+    await expect(worker.scheduled(undefined, off, ctx)).resolves.toBeUndefined();
     await Promise.all(waits);
-    expect(log.some((entry) => entry.includes('with gone as (delete from docs'))).toBe(true);
-    const { rows } = await pglite.query<{ n: number }>(
+    const left = await pglite.query<{ id: string }>(
+      "select id from docs where id in ('ac-old', 'ac-new', 'idem-old', 'idem-new', 'hi-old', 'mv-old') order by id",
+    );
+    expect(left.rows.map((row) => row.id)).toEqual(['ac-new', 'idem-new', 'mv-old']);
+    // 시드(오늘 기준 60일 안의 기록)와 품목은 그대로이고, 데모 초기화는 하지 않습니다.
+    const kept = await pglite.query<{ n: number }>(
+      "select count(*)::int as n from docs where store = 'skus'",
+    );
+    expect(kept.rows[0]!.n).toBe(120);
+    const resets = await pglite.query<{ n: number }>(
       "select count(*)::int as n from events where message = '데모 데이터를 초기화했습니다.'",
     );
-    expect(rows[0]!.n).toBe(0);
-    expect(String(info.mock.calls.at(-1)?.[0])).toContain('[sog] 보관 기간 정리');
+    expect(resets.rows[0]!.n).toBe(0);
+    expect(String(info.mock.calls.at(-1)?.[0])).toContain(
+      '[sog] 보관 기간 정리: 멱등 기록 1건, 활동 기록 1건, 변경 이력 1건',
+    );
     info.mockRestore();
   });
 });

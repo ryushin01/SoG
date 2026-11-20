@@ -41,6 +41,8 @@ test('백오피스: 로그인·대시보드·재고·도면·활동 기록·실�
   // 도면: 품목 찾기로 품목이 있는 칸을 표시하고, 그중 한 칸을 고른 모습
   await page.goto('/map?sku=sku-10201');
   await expect(page.getByRole('heading', { level: 1, name: '창고 도면' })).toBeVisible();
+  // 찾은 결과가 뜬 뒤에 칸을 누릅니다(먼저 누르면 다시 그리는 사이에 선택이 빠질 수 있음).
+  await expect(page.getByText(/산업용 USB-C 케이블 1m: \d+칸에/)).toBeVisible();
   await page
     .getByRole('button', { name: /찾는 품목 \d+개/ })
     .first()

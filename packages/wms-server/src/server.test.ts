@@ -1,6 +1,7 @@
 import type {
   ChangeEvent,
   CountTaskDetail,
+  DashboardKpis,
   HistoryEntry,
   LocationDetail,
   LocationOverview,
@@ -12,10 +13,13 @@ import type {
   Page,
   SkuDetail,
   SkuSummary,
+  Zone,
 } from '@sog/domain';
 import { SKU_PAGE_MAX } from '@sog/domain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PASSWORD, issueToken, LOCAL_AUTH_SECRET } from './auth';
+import type { StoreName } from './idb';
+import { createSeed } from './seed';
 import { createWmsServer, type WmsServer } from './server';
 import type { Storage } from './storage';
 
@@ -855,5 +859,60 @@ describe('오래된 기록 정리(초기화를 끈 운영)', () => {
     const moves = (await call(server, 'GET', '/api/movements?limit=5', { token: await as() }))
       .body as { items: Movement[] };
     expect(moves.items.length).toBeGreaterThan(0);
+  });
+});
+
+describe('옛 시드가 남은 저장소(실제 서버)', () => {
+  it('저장된 로케이션이 없는 구역은 기준 정보·운영 현황·실사 만들기에 쓰지 않는다', async () => {
+    // 실제 서버는 시드 버전이 바뀌어도 저장된 데이터를 지우지 않습니다. 구역을 더하기 전(시드 3)의 데이터처럼
+    // E·F 구역 로케이션과 그 재고가 없는 저장소를 만듭니다.
+    const seed = createSeed(new Date());
+    const oldZone = (locationId: string) => /^loc-[EF]-/.test(locationId);
+    const rows = new Map<StoreName, Map<string, unknown>>();
+    const put = (store: StoreName, doc: { id: string }) => {
+      if (!rows.has(store)) rows.set(store, new Map());
+      rows.get(store)!.set(doc.id, structuredClone(doc));
+    };
+    put('meta', { id: 'seed', version: 3 } as { id: string });
+    seed.users.forEach((doc) => put('users', doc));
+    seed.locations.filter((doc) => !oldZone(doc.id)).forEach((doc) => put('locations', doc));
+    seed.skus.forEach((doc) => put('skus', doc));
+    seed.stocks.filter((doc) => !oldZone(doc.locationId)).forEach((doc) => put('stocks', doc));
+    const docs = (store: StoreName) => [...(rows.get(store)?.values() ?? [])];
+    const storage: Storage = {
+      get: async (store, id) => structuredClone(rows.get(store)?.get(id)) as never,
+      getMany: async (store, ids) =>
+        ids
+          .map((id) => rows.get(store)?.get(id))
+          .filter(Boolean)
+          .map((doc) => structuredClone(doc)) as never,
+      all: async (store) => structuredClone(docs(store)) as never,
+      write: async (ops) => {
+        for (const op of ops) {
+          if ('put' in op) put(op.store, op.put);
+          else if ('delete' in op) rows.get(op.store)?.delete(op.delete);
+          else rows.get(op.store)?.clear();
+        }
+      },
+      deleteOlderThan: async () => 0,
+      close: () => undefined,
+    };
+    const server = await createWmsServer({ storage, dbName: `test-${dbSeq++}` });
+    opened.push(server);
+
+    const reference = (await call(server, 'GET', '/api/reference')).body as { zones: Zone[] };
+    expect(reference.zones.map((zone) => zone.code)).toEqual(['A', 'B', 'C', 'D']);
+    const dashboard = (await call(server, 'GET', '/api/dashboard')).body as DashboardKpis;
+    expect(dashboard.zoneValue.map((zone) => zone.zone)).toEqual(['A', 'B', 'C', 'D']);
+    const count = await call(server, 'POST', '/api/counts', {
+      body: {
+        title: '냉동 확인',
+        zone: 'E',
+        assigneeId: 'u-jung',
+        blind: false,
+        dueAt: new Date().toISOString(),
+      },
+    });
+    expect(count.status).toBe(400);
   });
 });

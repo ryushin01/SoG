@@ -845,30 +845,47 @@ export function createSeed(now: Date): SeedData {
       });
     }
     if (shippedAt) {
+      // 출고 확정: 집은 수량만큼 재고가 줄고 출고 기록과 재고 변경 이력이 남습니다(서버의 출고 확정과 같은 모양).
+      // 뒤에 만드는 출고 지시는 줄어든 재고에서 할당합니다.
+      const message = `박도윤님이 ${code}을(를) 출고했습니다.`;
       for (const line of lines) {
         for (const allocation of line.allocations) {
+          const shipped = allocation.pickedQty ?? allocation.qty;
+          const stock = stockOf(allocation.stockId);
+          const before = stock.onHand;
+          stock.onHand -= shipped;
+          stock.version += 1;
+          stock.updatedAt = shippedAt;
+          stock.updatedBy = 'u-park';
           movements.push({
             id: `mv-${pad(mv++, 5)}`,
             type: 'shipment',
             skuId: line.skuId,
             fromLocationId: allocation.locationId,
             toLocationId: null,
-            qty: allocation.pickedQty ?? allocation.qty,
+            qty: shipped,
             delta: 0,
             reason: `${customer} 출고`,
             ref: code,
             at: shippedAt,
             by: 'u-park',
           });
+          history.push({
+            id: `hi-${pad(hi++, 4)}`,
+            kind: 'stock',
+            docId: stock.id,
+            skuId: stock.skuId,
+            version: stock.version,
+            at: shippedAt,
+            by: 'u-park',
+            reason: message,
+            locationCode: locationOf(stock.locationId).code,
+            changes: [{ field: 'onHand', label: '보유', before, after: stock.onHand }],
+            blocked: false,
+          });
         }
       }
-      log({
-        kind: 'order.shipped',
-        message: `박도윤님이 ${code}을(를) 출고했습니다.`,
-        at: shippedAt,
-        by: 'u-park',
-        target: `/orders/${id}`,
-      });
+      log({ kind: 'order.shipped', message, at: shippedAt, by: 'u-park', target: `/orders/${id}` });
     }
     if (cancelledAt) {
       log({

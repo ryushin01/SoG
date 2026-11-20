@@ -51,6 +51,7 @@ import {
   type StockLevel,
   type SubmitCountLineRequest,
   type User,
+  type Zone,
   type ZoneCode,
 } from '@sog/domain';
 import { Database, STORES, type WriteOp } from './idb';
@@ -544,8 +545,10 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
     [
       'GET',
       '/api/reference',
-      async () =>
-        json(200, { zones: ZONES, locations: await load.locations(), users: await load.users() }),
+      async () => {
+        const locations = await load.locations();
+        return json(200, { zones: zonesIn(locations), locations, users: await load.users() });
+      },
     ],
     [
       'POST',
@@ -1392,7 +1395,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         shipment: ofDay.filter((m) => m.type === 'shipment').reduce((sum, m) => sum + m.qty, 0),
       });
     }
-    const zoneValue = ZONES.map(({ code }) => {
+    const zoneValue = zonesIn(locations).map(({ code }) => {
       const own = stocks.filter((stock) => zoneOf.get(stock.locationId) === code);
       return {
         zone: code as ZoneCode,
@@ -1531,6 +1534,9 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       load.counts(),
       load.lines(),
     ]);
+    // 옛 시드가 남은 저장소에는 새 구역의 로케이션이 없을 수 있습니다(기준 정보에도 나오지 않음).
+    if (!locations.some((location) => location.zone === request.zone))
+      throw new HttpError(400, 'VALIDATION', '구역을 선택해 주세요.');
     const inZone = locations.filter((location) => location.zone === request.zone);
     // 로케이션을 골라 보내면 모두 고른 구역 안의 로케이션이어야 합니다(다른 구역 재고가 섞이지 않게).
     if (request.locationIds !== undefined && request.locationIds !== null) {
@@ -2115,6 +2121,14 @@ function safeDecode(value: string): string | null {
 }
 
 /** 목록 개수 상한. 화면은 최대 100건(활동 기록)을 씁니다. */
+/**
+ * 저장된 로케이션이 있는 구역만 돌려줍니다. 실제 서버는 시드 버전이 바뀌어도 저장된 데이터를 지우지 않아
+ * (매일 초기화를 끈 운영 등) 옛 데이터에는 새로 더한 구역의 로케이션이 없을 수 있습니다.
+ */
+function zonesIn(locations: readonly Location[]): Zone[] {
+  return ZONES.filter((zone) => locations.some((location) => location.zone === zone.code));
+}
+
 const MAX_LIST_LIMIT = 200;
 
 /** 사용자 목록을 기억하는 시간 */
