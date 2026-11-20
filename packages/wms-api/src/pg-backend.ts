@@ -94,10 +94,14 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
       return rows.map((row) => row.data);
     },
     async all<T>(store: StoreName) {
-      const { rows } = await exec().query<{ data: T }>('select data from docs where store = $1', [
-        store,
-      ]);
-      return rows.map((row) => row.data);
+      // 문서마다 행 하나로 받지 않고 DB에서 배열 하나(행 하나)로 묶어 받습니다. Workers의 pg 드라이버는 행마다 드는
+      // CPU가 커서(운영 측정 행당 약 15~40µs), 행이 많은 요청(대시보드 약 1,300행)이 행 수만큼 느려졌습니다.
+      // 순서는 지금처럼 정하지 않습니다(필요한 곳에서 정렬).
+      const { rows } = await exec().query<{ data: T[] | null }>(
+        'select jsonb_agg(data) as data from docs where store = $1',
+        [store],
+      );
+      return rows[0]?.data ?? [];
     },
     async write(ops) {
       if (ops.length === 0) return;
