@@ -19,7 +19,7 @@ export interface User {
   team: string;
 }
 
-export type ZoneCode = 'A' | 'B' | 'C' | 'D';
+export type ZoneCode = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 export interface Zone {
   code: ZoneCode;
@@ -38,7 +38,17 @@ export interface Location {
   level: number;
 }
 
-export type SkuCategory = 'electronics' | 'packaging' | 'tools' | 'household' | 'food' | 'apparel';
+export type SkuCategory =
+  | 'electronics'
+  | 'packaging'
+  | 'tools'
+  | 'household'
+  | 'food'
+  | 'apparel'
+  | 'chilled'
+  | 'frozen'
+  | 'beauty'
+  | 'pet';
 
 export type SkuShape = 'box' | 'bottle' | 'can' | 'pouch' | 'tube' | 'roll';
 

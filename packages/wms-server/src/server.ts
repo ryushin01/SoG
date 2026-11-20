@@ -8,6 +8,7 @@ import {
   COUNT_STATUS_LABEL,
   movementEffect,
   settledOnHand,
+  SKU_PAGE_MAX,
   stockStatus,
   variance,
   type Activity,
@@ -100,8 +101,22 @@ export interface WmsServer {
   /** 이 탭과 다른 탭에서 일어난 변경을 받습니다. */
   subscribe(listener: (event: ChangeEvent) => void): () => void;
   reset(): Promise<void>;
+  /**
+   * 보관 기간이 지난 기록을 지웁니다(RETENTION_DAYS). 매일 초기화를 끈 운영에서 예약 작업이 부릅니다.
+   * 품목·재고·입출고·실사·출고 지시 같은 업무 데이터는 지우지 않습니다.
+   */
+  prune(): Promise<PruneResult>;
   close(): void;
 }
+
+/**
+ * 기록 보관 기간(일). 멱등 기록은 같은 요청을 다시 보냈는지 가리는 데만 쓰여 하루면 충분하고,
+ * 활동 기록은 화면의 최근 흐름, 변경 이력은 품목별 감사 기록이라 더 오래 둡니다.
+ */
+export const RETENTION_DAYS = { idempotency: 1, activity: 90, history: 365 } as const;
+
+/** 정리에서 저장소마다 지운 문서 수 */
+export type PruneResult = Record<keyof typeof RETENTION_DAYS, number>;
 
 export class HttpError extends Error {
   constructor(
@@ -145,7 +160,7 @@ type Handler = (ctx: Context, params: Record<string, string>) => Promise<ServerR
 
 const SEED_KEY = 'seed';
 /** 시드 구성이 바뀌면 올립니다. 데모 모드는 저장된 시드 버전이 다르면 처음 상태로 다시 채웁니다. */
-const SEED_VERSION = 3;
+const SEED_VERSION = 4;
 
 export async function createWmsServer(options: WmsServerOptions = {}): Promise<WmsServer> {
   const dbName = options.dbName ?? 'sog-wms';
@@ -888,7 +903,7 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
       sort: sort && SKU_SORTS.includes(sort) ? sort : 'code',
       dir: query.get('dir') === 'desc' ? 'desc' : 'asc',
       page: intParam(query.get('page'), 1, 1, 10_000),
-      size: intParam(query.get('size'), 20, 1, 100),
+      size: intParam(query.get('size'), 20, 1, SKU_PAGE_MAX),
     };
     const [skus, stocks, locations] = await Promise.all([
       load.skus(),
@@ -2006,6 +2021,15 @@ export async function createWmsServer(options: WmsServerOptions = {}): Promise<W
         origin,
         message: '데모 데이터를 초기화했습니다.',
       });
+    },
+    async prune() {
+      // 오래된 기록만 지우므로 쓰기 잠금이나 변경 알림이 필요 없습니다(열린 화면의 최근 기록은 그대로).
+      const cutoff = (days: number) => new Date(now().getTime() - days * 86_400_000).toISOString();
+      const result = {} as PruneResult;
+      for (const [store, days] of Object.entries(RETENTION_DAYS) as [keyof PruneResult, number][]) {
+        result[store] = await db.deleteOlderThan(store, cutoff(days));
+      }
+      return result;
     },
     close() {
       publisher.close();

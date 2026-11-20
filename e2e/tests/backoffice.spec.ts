@@ -12,7 +12,7 @@ test('주요 화면이 열리고 접근성 검사를 통과한다', async ({ pag
     ['/inventory', '재고'],
     ['/inventory/sku-10201', '산업용 USB-C 케이블 1m'],
     ['/counts', '재고 실사'],
-    ['/counts/ct-002', '냉장 구역 월말 실사'],
+    ['/counts/ct-002', '냉장 1통로 월말 실사'],
     ['/activity', '활동 기록'],
   ] as const) {
     await page.goto(path);

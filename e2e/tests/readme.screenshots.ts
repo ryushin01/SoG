@@ -4,7 +4,8 @@ import { DEMO_PASSWORD, loginBackoffice, loginCount, resetDemo } from './helpers
 
 /**
  * README 화면 촬영 (pnpm --dir e2e screenshots, 먼저 pnpm build && pnpm site).
- * 결과: 저장소 루트의 docs/images/*.jpg. 브라우저 안 데모 서버의 가상 데이터만 나옵니다.
+ * 결과: 저장소 루트의 docs/images/*.jpg와 두 앱의 공유 미리보기(각 앱 public/og.jpg, 1200×630).
+ * 브라우저 안 데모 서버의 가상 데이터만 나옵니다.
  * 평소 E2E에는 들어가지 않습니다(SCREENSHOTS=1일 때만 프로젝트가 생김).
  */
 const OUT = '../docs/images';
@@ -55,7 +56,7 @@ test('백오피스: 로그인·대시보드·재고·도면·활동 기록·실�
 
   await page.goto('/counts');
   await page
-    .getByRole('link', { name: /냉장 구역/ })
+    .getByRole('link', { name: /냉장 1통로/ })
     .first()
     .click();
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -135,4 +136,47 @@ test.describe('현장 앱', () => {
     await page.getByRole('link', { name: /오프라인 · 대기 1/ }).click();
     await shoot(page, 'count-outbox');
   });
+});
+
+test('공유 미리보기(OG) 이미지 1200×630', async ({ browser }) => {
+  const { baseURL } = test.info().project.use;
+  // 백오피스: README와 같은 1440 배치의 운영 현황을 1200×630으로 줄여 담습니다(머리글 아래부터).
+  const wide = await browser.newContext({
+    baseURL,
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 1200 / 1440,
+  });
+  const page = await wide.newPage();
+  await loginBackoffice(page, '김하늘', '/');
+  await expect(page.getByRole('heading', { level: 1, name: '운영 현황' })).toBeVisible();
+  await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(1500);
+  const top = (await page.locator('main').boundingBox())!.y;
+  await page.screenshot({
+    path: '../apps/backoffice/public/og.jpg',
+    type: 'jpeg',
+    quality: 82,
+    clip: { x: 0, y: top + 16, width: 1440, height: 756 },
+  });
+  await wide.close();
+
+  // 현장 앱: 휴대폰 너비(370)의 품목 실사 화면을 1200×630 가운데에 둡니다.
+  const phone = await browser.newContext({ baseURL, viewport: { width: 370, height: 630 } });
+  const field = await phone.newPage();
+  await loginCount(field);
+  await field.getByRole('link', { name: /A구역 2통로/ }).click();
+  await field.locator('a.line').first().click();
+  await expect(field).toHaveURL(/\/lines\//);
+  await field.evaluate(() => document.fonts.ready);
+  await field.waitForTimeout(800);
+  const shot = (await field.screenshot({ type: 'png' })).toString('base64');
+  const background = await field.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await field.setViewportSize({ width: 1200, height: 630 });
+  await field.setContent(
+    `<body style="margin:0;height:630px;display:grid;place-items:center;background:${background}">` +
+      `<img alt="" width="370" height="630" src="data:image/png;base64,${shot}"></body>`,
+  );
+  await field.screenshot({ path: '../apps/count/public/og.jpg', type: 'jpeg', quality: 82 });
+  await phone.close();
 });

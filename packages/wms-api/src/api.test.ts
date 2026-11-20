@@ -70,7 +70,7 @@ describe('실제 서버(Postgres)', () => {
   it('상태 확인은 remote를 알리고, 처음 요청에 스키마와 시드를 만든다', async () => {
     expect((await call<{ mode: string }>('GET', '/api/health')).body.mode).toBe('remote');
     const page = (await call<Page<SkuSummary>>('GET', '/api/skus?size=5')).body;
-    expect(page.total).toBe(48);
+    expect(page.total).toBe(120);
   });
 
   it('시드 버전이 바뀌어도 실제 서버의 데이터는 지우지 않는다', async () => {
@@ -245,6 +245,81 @@ describe('실제 서버(Postgres)', () => {
       }),
     );
     expect(allowed.status).toBe(200);
+  });
+
+  it('매일 예약 작업: 기본은 데모 데이터를 처음 상태로 되돌린다', async () => {
+    const detail = (await call<SkuDetail>('GET', '/api/skus/sku-10201')).body;
+    await call('PATCH', '/api/skus/sku-10201', {
+      body: { safetyStock: 99 },
+      ifMatch: detail.sku.version,
+    });
+    const denied = await api.handle(new Request('https://sog.test/api/cron/daily'));
+    expect(denied.status).toBe(401);
+    const daily = await api.handle(
+      new Request('https://sog.test/api/cron/daily', {
+        method: 'POST',
+        headers: { authorization: 'Bearer cron-test' },
+      }),
+    );
+    expect(daily.status).toBe(200);
+    expect(await daily.json()).toEqual({ reset: true });
+    const after = (await call<SkuDetail>('GET', '/api/skus/sku-10201')).body;
+    expect(after.sku.safetyStock).toBe(detail.sku.safetyStock);
+  });
+
+  it('매일 예약 작업: 초기화를 끄면 데이터는 두고 보관 기간이 지난 기록과 오래된 변경 알림만 지운다', async () => {
+    const pg = await PGlite.create();
+    let clock = Date.parse('2026-11-20T00:00:00Z');
+    const kept = await createApiHandler(fromPglite(pg), {
+      authSecret: SECRET,
+      cronSecret: 'cron-test',
+      demoReset: false,
+      now: () => new Date(clock),
+    });
+    const send = async (method: string, path: string, init: RequestInit = {}) => {
+      const { token } = await issueToken(SECRET, 'u-kim', Math.floor(clock / 1000));
+      const headers = new Headers(init.headers);
+      headers.set('authorization', `Bearer ${token}`);
+      return kept.handle(new Request(`https://sog.test${path}`, { ...init, method, headers }));
+    };
+    const daily = () =>
+      kept.handle(
+        new Request('https://sog.test/api/cron/daily', {
+          method: 'POST',
+          headers: { authorization: 'Bearer cron-test' },
+        }),
+      );
+    try {
+      const detail = (await (await send('GET', '/api/skus/sku-10201')).json()) as SkuDetail;
+      const edit = await send('PATCH', '/api/skus/sku-10201', {
+        body: JSON.stringify({ safetyStock: 99 }),
+        headers: {
+          'content-type': 'application/json',
+          'if-match': `"${detail.sku.version}"`,
+          'idempotency-key': 'daily-1',
+        },
+      });
+      expect(edit.status).toBe(200);
+      await pg.query(
+        `insert into events (at, origin, by_user, topics, message)
+         values (now() - interval '2 days', 'old', 'u-kim', '{}', '오래된 변경')`,
+      );
+
+      clock += 2 * 86_400_000;
+      const response = await daily();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        pruned: { idempotency: 1, activity: 0, history: 0 },
+      });
+      const sku = (await (await send('GET', '/api/skus/sku-10201')).json()) as SkuDetail;
+      expect(sku.sku.safetyStock).toBe(99);
+      const { rows } = await pg.query<{ n: number }>(
+        "select count(*)::int as n from events where message in ('오래된 변경', '데모 데이터를 초기화했습니다.')",
+      );
+      expect(rows[0]!.n).toBe(0);
+    } finally {
+      await kept.close();
+    }
   });
 
   it('실시간 반영 한 번(쿼리 하나)에 접속 신호를 남기고 놓친 변경·접속자·새 순번을 받는다', async () => {

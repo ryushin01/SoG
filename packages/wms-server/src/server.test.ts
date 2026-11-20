@@ -13,6 +13,7 @@ import type {
   SkuDetail,
   SkuSummary,
 } from '@sog/domain';
+import { SKU_PAGE_MAX } from '@sog/domain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PASSWORD, issueToken, LOCAL_AUTH_SECRET } from './auth';
 import { createWmsServer, type WmsServer } from './server';
@@ -81,7 +82,7 @@ describe('조회', () => {
     const response = await call(server!, 'GET', '/api/skus?size=10&sort=onHand&dir=desc');
     const page = response.body as Page<SkuSummary>;
     expect(response.status).toBe(200);
-    expect(page.total).toBe(48);
+    expect(page.total).toBe(120);
     expect(page.items).toHaveLength(10);
     expect(page.items[0]!.onHand).toBeGreaterThanOrEqual(page.items[9]!.onHand);
   });
@@ -101,7 +102,7 @@ describe('창고 도면', () => {
     const { items } = (await call(server!, 'GET', '/api/locations/overview')).body as {
       items: LocationOverview[];
     };
-    expect(items).toHaveLength(42);
+    expect(items).toHaveLength(132);
     expect(items.some((item) => item.status === 'empty')).toBe(true);
     // ct-003(A구역 2통로)이 진행 중
     expect(
@@ -406,7 +407,8 @@ describe('실사 흐름', () => {
     const response = await call(server!, 'POST', '/api/counts', {
       body: {
         title: '중복 확인',
-        zone: 'B',
+        // 출고 대기 구역은 검토 대기 중인 ct-010이 모든 재고를 맡고 있습니다.
+        zone: 'D',
         assigneeId: 'u-jung',
         blind: false,
         dueAt: new Date().toISOString(),
@@ -750,6 +752,10 @@ describe('입력 검증과 오류 응답', () => {
     expect(page.items.map((sku) => sku.code)).toEqual(
       [...page.items.map((sku) => sku.code)].sort((a, b) => a.localeCompare(b)),
     );
+    // 품목을 고르는 목록은 상한까지 한 번에 받아 모든 품목을 봅니다(너무 큰 값은 상한으로).
+    const all = (await call(server!, 'GET', '/api/skus?size=100000&sort=name'))
+      .body as Page<SkuSummary>;
+    expect([all.size, all.total, all.items.length]).toEqual([SKU_PAGE_MAX, 120, 120]);
 
     const few = (await call(server!, 'GET', '/api/movements?limit=abc')).body as {
       items: Movement[];
@@ -783,6 +789,7 @@ describe('입력 검증과 오류 응답', () => {
         throw new Error('relation "docs" does not exist');
       },
       write: async () => undefined,
+      deleteOlderThan: async () => 0,
       close: () => undefined,
     };
     const server = await createWmsServer({ storage: failing, dbName: `test-${dbSeq++}` });
@@ -797,5 +804,56 @@ describe('입력 검증과 오류 응답', () => {
     });
     expect(String(log.mock.calls[0]?.[0])).toContain('GET /api/dashboard');
     log.mockRestore();
+  });
+});
+
+describe('오래된 기록 정리(초기화를 끈 운영)', () => {
+  it('보관 기간이 지난 멱등 기록(1일)·활동 기록(90일)·변경 이력(365일)만 지우고 업무 데이터는 둔다', async () => {
+    let clock = Date.parse('2026-11-20T00:00:00Z');
+    const server = await createWmsServer({ dbName: `test-${dbSeq++}`, now: () => new Date(clock) });
+    opened.push(server);
+    const as = async () =>
+      (await issueToken(LOCAL_AUTH_SECRET, 'u-kim', Math.floor(clock / 1000))).token;
+    const detail = (await call(server, 'GET', '/api/skus/sku-10201', { token: await as() }))
+      .body as SkuDetail;
+    const edit = await call(server, 'PATCH', '/api/skus/sku-10201', {
+      body: { safetyStock: 99 },
+      ifMatch: detail.sku.version,
+      key: 'prune-1',
+      token: await as(),
+    });
+    expect(edit.status).toBe(200);
+    const DAY = 86_400_000;
+
+    // 이틀 뒤: 다시 보내기 판단에 쓰는 멱등 기록만 지웁니다.
+    clock += 2 * DAY;
+    expect(await server.prune()).toEqual({ idempotency: 1, activity: 0, history: 0 });
+
+    // 100일 뒤: 활동 기록(시드 포함)이 지워지고 변경 이력은 남습니다.
+    clock += 98 * DAY;
+    const later = await server.prune();
+    expect(later.idempotency).toBe(0);
+    expect(later.activity).toBeGreaterThan(100);
+    expect(later.history).toBe(0);
+    const feed = (await call(server, 'GET', '/api/activity', { token: await as() })).body as {
+      total: number;
+    };
+    expect(feed.total).toBe(0);
+    const kept = (await call(server, 'GET', '/api/skus/sku-10201/history', { token: await as() }))
+      .body as { items: HistoryEntry[] };
+    expect(kept.items.length).toBeGreaterThan(0);
+
+    // 400일 뒤: 변경 이력도 지웁니다. 품목·재고·입출고 기록은 그대로입니다.
+    clock += 300 * DAY;
+    expect((await server.prune()).history).toBeGreaterThan(0);
+    const gone = (await call(server, 'GET', '/api/skus/sku-10201/history', { token: await as() }))
+      .body as { items: HistoryEntry[] };
+    expect(gone.items).toHaveLength(0);
+    const sku = (await call(server, 'GET', '/api/skus/sku-10201', { token: await as() }))
+      .body as SkuDetail;
+    expect(sku.sku.safetyStock).toBe(99);
+    const moves = (await call(server, 'GET', '/api/movements?limit=5', { token: await as() }))
+      .body as { items: Movement[] };
+    expect(moves.items.length).toBeGreaterThan(0);
   });
 });

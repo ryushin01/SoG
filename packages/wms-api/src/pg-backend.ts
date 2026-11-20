@@ -106,6 +106,16 @@ export function createPgBackend(db: SqlDatabase): PgBackend {
       if (tx) await applyOps(tx, ops);
       else await db.transaction((own) => applyOps(own, ops));
     },
+    async deleteOlderThan(store, before) {
+      // 문서를 Worker로 읽어 오지 않고 DB 안에서 지웁니다. 시각은 모두 toISOString() 형식이라 문자열 비교가
+      // 시간 순서와 같습니다.
+      const { rows } = await exec().query<{ n: number }>(
+        `with gone as (delete from docs where store = $1 and data->>'at' < $2 returning 1)
+         select count(*)::int as n from gone`,
+        [store, before],
+      );
+      return rows[0]?.n ?? 0;
+    },
     close() {
       void db.close();
     },

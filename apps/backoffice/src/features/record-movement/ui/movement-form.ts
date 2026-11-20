@@ -22,6 +22,7 @@ import { idempotencyKey, SubmitLock, toApiError } from '@/shared/api';
 import { FieldErrors, Toaster } from '@/shared/ui';
 import { LocationDirectory } from '@/entities/location';
 import { MovementApi } from '@/entities/movement';
+import { skuOptionsRequest } from '@/entities/sku';
 
 type MovementKind = 'receipt' | 'shipment' | 'transfer';
 
@@ -79,7 +80,7 @@ export class MovementForm {
   protected readonly selectedSku = computed(() => this.skuId() ?? this.model().skuId);
 
   protected readonly skus = httpResource<Page<SkuSummary>>(() =>
-    this.skuId() ? undefined : { url: '/api/skus', params: { size: 100, sort: 'name' } },
+    this.skuId() ? undefined : skuOptionsRequest(),
   );
   protected readonly detail = httpResource<SkuDetail>(() =>
     this.selectedSku() ? `/api/skus/${this.selectedSku()}` : undefined,

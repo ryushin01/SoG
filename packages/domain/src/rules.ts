@@ -85,6 +85,10 @@ export const CATEGORY_LABEL: Record<SkuCategory, string> = {
   household: '생활용품',
   food: '상온식품',
   apparel: '의류잡화',
+  chilled: '냉장식품',
+  frozen: '냉동식품',
+  beauty: '화장품',
+  pet: '반려용품',
 };
 
 export const MOVEMENT_LABEL: Record<MovementType, string> = {
@@ -134,11 +138,19 @@ export function allocate<T extends { id: string; onHand: number; reserved: numbe
   return left > 0 ? null : picks;
 }
 
+/**
+ * 품목 목록(`/api/skus`) 한 쪽의 최대 개수. 품목을 고르는 목록(출고 지시·입출고·도면 품목 찾기)은 이만큼 한 번에
+ * 받아 모든 품목을 보여 줍니다(데모 120종). 품목이 이보다 많아지면 검색해서 고르는 방식이 필요합니다.
+ */
+export const SKU_PAGE_MAX = 500;
+
 export const ZONE_LABEL: Record<ZoneCode, string> = {
   A: 'A 상온 랙',
   B: 'B 냉장',
   C: 'C 대형 팔레트',
   D: 'D 출고 대기',
+  E: 'E 냉동',
+  F: 'F 소형 피킹',
 };
 
 const won = new Intl.NumberFormat('ko-KR');

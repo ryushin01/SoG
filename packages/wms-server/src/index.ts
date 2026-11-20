@@ -8,6 +8,12 @@ export {
 export { DB_VERSION, type StoreName, STORES, type WriteOp } from './idb';
 export { createLock, type Lock } from './lock';
 export { USERS, ZONES } from './seed';
-export type { ServerRequest, ServerResponse, WmsServer, WmsServerOptions } from './server';
-export { createWmsServer, HttpError } from './server';
+export type {
+  PruneResult,
+  ServerRequest,
+  ServerResponse,
+  WmsServer,
+  WmsServerOptions,
+} from './server';
+export { createWmsServer, HttpError, RETENTION_DAYS } from './server';
 export { broadcastPublisher, type ChangePublisher, type Storage } from './storage';

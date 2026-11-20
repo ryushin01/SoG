@@ -59,7 +59,8 @@ describe('MovementForm', () => {
 
   it('출고는 가용 재고보다 많이 보낼 수 없다', async () => {
     await userEvent.click(screen.getByRole('radio', { name: '출고' }));
-    const option = await screen.findByRole('option', { name: /A-02-02-1/ }, { timeout: 3000 });
+    // 시드에서 sku-10201은 A-01-03-1·A-02-04-3·F-01-03-2에 있습니다.
+    const option = await screen.findByRole('option', { name: /A-01-03-1/ }, { timeout: 3000 });
     await userEvent.selectOptions(screen.getByLabelText('출발 로케이션'), option);
     const qty = screen.getByLabelText('수량');
     await userEvent.clear(qty);

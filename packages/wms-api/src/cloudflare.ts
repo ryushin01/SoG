@@ -18,8 +18,13 @@ export interface Env {
   HYPERDRIVE?: { connectionString: string };
   /** 로그인 토큰 서명 키(Worker 비밀 값) */
   AUTH_SECRET?: string;
-  /** 매일 밤 초기화를 부를 때 쓰는 키(Worker 비밀 값). 예약 작업(scheduled)이 붙여 부릅니다. */
+  /** 매일 예약 작업을 부를 때 쓰는 키(Worker 비밀 값). 예약 작업(scheduled)이 붙여 부릅니다. */
   CRON_SECRET?: string;
+  /**
+   * `off`면 매일 예약 작업이 데모 데이터를 되돌리지 않고 보관 기간이 지난 기록만 지웁니다(실제 운영).
+   * 없거나 다른 값이면 지금처럼 매일 처음 상태로 되돌립니다(wrangler.jsonc의 vars).
+   */
+  DEMO_RESET?: string;
   /** 정적 자산(site/) */
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
@@ -128,8 +133,12 @@ export function createWorker(openDatabase: OpenDatabase) {
   const db = requestScoped(current);
   let handler: Promise<ApiHandler> | null = null;
 
-  function getHandler(authSecret: string, cronSecret: string | undefined): Promise<ApiHandler> {
-    handler ??= createApiHandler(db, { authSecret, cronSecret }).catch((error: unknown) => {
+  function getHandler(env: Env & { AUTH_SECRET: string }): Promise<ApiHandler> {
+    handler ??= createApiHandler(db, {
+      authSecret: env.AUTH_SECRET,
+      cronSecret: env.CRON_SECRET,
+      demoReset: env.DEMO_RESET !== 'off',
+    }).catch((error: unknown) => {
       handler = null;
       throw error;
     });
@@ -158,7 +167,7 @@ export function createWorker(openDatabase: OpenDatabase) {
     const database = closeAfterPending(openDatabase({ ...env, HYPERDRIVE: hyperdrive }));
     try {
       const response = await current.run(database, async () =>
-        (await getHandler(authSecret, env.CRON_SECRET)).handle(request),
+        (await getHandler({ ...env, AUTH_SECRET: authSecret })).handle(request),
       );
       return withTiming(response, started, database.stats);
     } catch (error) {
@@ -189,10 +198,13 @@ export function createWorker(openDatabase: OpenDatabase) {
       return secure(await env.ASSETS.fetch(new Request(new URL(app, url), request)));
     },
 
-    /** 매일 03:00(KST) 데모 데이터를 처음 상태로 되돌립니다(wrangler.jsonc의 triggers.crons). */
+    /**
+     * 매일 03:00(KST) 예약 작업(wrangler.jsonc의 triggers.crons). 데모는 처음 상태로 되돌리고,
+     * DEMO_RESET=off인 운영은 보관 기간이 지난 기록만 지웁니다.
+     */
     async scheduled(_controller: unknown, env: Env, ctx: WorkerContext): Promise<void> {
       const response = await handleApi(
-        new Request('https://sog.internal/api/cron/reset', {
+        new Request('https://sog.internal/api/cron/daily', {
           method: 'POST',
           headers: { authorization: `Bearer ${env.CRON_SECRET ?? ''}` },
         }),
@@ -200,7 +212,7 @@ export function createWorker(openDatabase: OpenDatabase) {
         ctx,
       );
       if (!response.ok) {
-        throw new Error(`데모 초기화 실패: ${response.status} ${await response.text()}`);
+        throw new Error(`매일 예약 작업 실패: ${response.status} ${await response.text()}`);
       }
     },
   };

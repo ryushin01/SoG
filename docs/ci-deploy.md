@@ -39,8 +39,8 @@ Worker 하나(`sog`)에 두 앱의 정적 파일과 `/api`를 함께 올립니�
 - 캐시: 서비스 워커 파일(`ngsw-worker.js`, `ngsw.json`)은 `no-cache`, 해시가 붙은 JS·CSS·글꼴(`media/`)은 1년, 이름에 해시가 없는 한글 글꼴 조각(`fonts/`)은 하루 + 일주일 `stale-while-revalidate`입니다(`site/_headers`). 글꼴을 다시 만들어도(`pnpm fonts`) 하루 안에 바뀝니다.
 - 보안 헤더: 모든 응답에 `Content-Security-Policy`(`frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'`), `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`(카메라는 현장 앱 바코드 때문에 같은 출처만)를 붙입니다. 값은 `packages/wms-api/src/security-headers.json` 한 곳에 두고, Cloudflare가 바로 내보내는 정적 파일은 `site/_headers`의 `/*` 규칙으로, Worker가 만드는 응답(API, 현장 앱 화면 주소)은 `cloudflare.ts`가, 로컬 미리보기는 `serve-site.mjs`가 같은 값을 붙입니다. Storybook이 같은 출처 iframe으로 미리보기를 띄우므로 `'none'`이 아니라 `'self'`입니다. 스크립트까지 막는 전체 CSP는 Angular가 실행 중에 넣는 스타일 때문에 nonce가 필요해 넣지 않았습니다.
 - DB: Neon(무료, 싱가포르)에 Hyperdrive 설정 `sog-db`로 연결합니다. Hyperdrive가 연결을 DB 가까이에 모아 두어 요청마다 새로 연결해도 빠릅니다. 쿼리 결과 캐시는 꺼서 변경 피드·접속 표시가 늦게 보이지 않게 했습니다. Neon 프로젝트는 처음에 Vercel Marketplace 연동으로 만들어 Vercel 프로젝트 `sog`에 묶여 있으므로, 그 Vercel 프로젝트는 지우지 않습니다. GitHub 연결은 끊었고, 옛 주소 `sog-ryushin01.vercel.app`은 모든 경로를 새 주소로 넘기는(308) 배포만 남겼습니다(`vercel.json`의 `redirects`만 담아 Vercel CLI로 올림).
-- 비밀 값: `AUTH_SECRET`(로그인 토큰 서명)과 `CRON_SECRET`(매일 초기화)은 Worker Secret입니다(`npx wrangler secret put AUTH_SECRET`).
-- 예약 작업: 매일 03:00(KST) Cron Trigger가 데모 데이터를 처음 상태로 되돌립니다(`triggers.crons`).
+- 비밀 값: `AUTH_SECRET`(로그인 토큰 서명)과 `CRON_SECRET`(매일 예약 작업)은 Worker Secret입니다(`npx wrangler secret put AUTH_SECRET`).
+- 예약 작업: 매일 03:00(KST) Cron Trigger가 데모 데이터를 처음 상태로 되돌립니다(`triggers.crons`). `vars.DEMO_RESET`을 `off`로 바꾸면 되돌리지 않고 보관 기간이 지난 기록만 지웁니다([기록 보관 기간](backend.md#기록-보관-기간초기화를-끈-운영)).
 - 무료 요금제 한도: Worker 요청 하루 10만 건, Hyperdrive 쿼리 하루 10만 건입니다. 정적 파일은 한도를 쓰지 않습니다. 화면을 열어 둔 탭은 실시간 반영(`/api/live`, 요청 하나·쿼리 하나)을 조작 중 2.5초, 조작이 없으면 10초, 가려지면 15초 간격으로 부르고 2분 넘게 가려지면 멈춥니다. 조작 없이 하루 종일 띄운 탭 하나가 약 8,600건입니다([실제 서버](backend.md#실시간-반영)).
 - 로그: Cloudflare 대시보드의 Workers 로그나 `npx wrangler tail sog`로 봅니다. 서버가 처리하지 못한 오류는 `[sog] 처리하지 못한 오류: <메서드> <경로>`로 남고, 응답에는 오류 코드 `INTERNAL`과 일반 문구만 나갑니다.
 

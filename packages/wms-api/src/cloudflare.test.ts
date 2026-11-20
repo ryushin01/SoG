@@ -173,8 +173,23 @@ describe('Cloudflare Worker 진입점', () => {
 
   it('CRON_SECRET이 없으면 예약 작업이 실패를 알린다', async () => {
     await expect(worker.scheduled(undefined, env({ CRON_SECRET: undefined }), ctx)).rejects.toThrow(
-      '데모 초기화 실패: 401',
+      '매일 예약 작업 실패: 401',
     );
     await Promise.all(waits);
+  });
+
+  it('DEMO_RESET=off면 예약 작업이 데이터를 되돌리지 않고 보관 기간이 지난 기록만 지운다', async () => {
+    const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    await expect(
+      worker.scheduled(undefined, env({ DEMO_RESET: 'off' }), ctx),
+    ).resolves.toBeUndefined();
+    await Promise.all(waits);
+    expect(log.some((entry) => entry.includes('with gone as (delete from docs'))).toBe(true);
+    const { rows } = await pglite.query<{ n: number }>(
+      "select count(*)::int as n from events where message = '데모 데이터를 초기화했습니다.'",
+    );
+    expect(rows[0]!.n).toBe(0);
+    expect(String(info.mock.calls.at(-1)?.[0])).toContain('[sog] 보관 기간 정리');
+    info.mockRestore();
   });
 });

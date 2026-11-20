@@ -77,7 +77,7 @@ test('재고 목록을 지금 필터 그대로 CSV로 내려받는다', async ({
   expect(text.charCodeAt(0)).toBe(0xfeff);
   const lines = text.slice(1).split('\r\n');
   expect(lines[0]).toContain('품목 코드,바코드,품목명,분류');
-  expect(lines).toHaveLength(9);
+  expect(lines).toHaveLength(13);
   expect(lines.slice(1).every((line) => line.includes(',상온식품,'))).toBe(true);
 });
 
