@@ -105,7 +105,22 @@ Workers 무료 요청·Hyperdrive 무료 쿼리가 각각 하루 10만 건이라
 - `scripts/build-cloudflare.mjs`: 두 앱과 Storybook을 `site/`로 합치고 `_redirects`·`_headers`를 넣습니다.
 - `scripts/build-api.mjs`: 로컬 미리보기·E2E용 `/api`를 esbuild로 묶습니다(`local.mjs`: PGlite).
 - DB는 Neon(싱가포르)이고 Hyperdrive 설정 `sog-db`로 연결합니다(쿼리 결과 캐시는 끔). `AUTH_SECRET`·`CRON_SECRET`은 Worker Secret입니다.
-- 매일 03:00(KST) Cron Trigger가 Worker의 `scheduled`를 불러, `/api/cron/reset`을 `Authorization: Bearer <CRON_SECRET>`으로 처리해 데모 데이터를 처음 상태로 되돌립니다.
+- 매일 03:00(KST) Cron Trigger가 Worker의 `scheduled`를 불러 `/api/cron/daily`를 `Authorization: Bearer <CRON_SECRET>`으로 처리합니다. 하루 지난 변경 알림(`events`)과 끊긴 접속 정보(`presence`)를 지운 뒤, `DEMO_RESET`이 `on`(기본)이면 데모 데이터를 처음 상태로 되돌립니다.
+
+## 기록 보관 기간(초기화를 끈 운영)
+
+실제 운영처럼 데이터를 계속 쌓으려면 `wrangler.jsonc`의 `vars.DEMO_RESET`을 `off`로 바꿉니다. 그러면 매일 예약 작업이 데이터를 되돌리지 않고 보관 기간이 지난 기록만 지웁니다(`RETENTION_DAYS`, `WmsServer.prune()`).
+
+| 기록 | 보관 | 이유 |
+|---|---|---|
+| 멱등 기록(`idempotency`) | 1일 | 같은 요청을 다시 보냈는지 가리는 데만 씁니다. 현장 앱 보낼함은 연결되는 대로 바로 다시 보냅니다 |
+| 활동 기록(`activity`) | 90일 | 화면의 최근 흐름과 필터·더 보기 |
+| 변경 이력(`history`) | 365일 | 품목별 감사 기록(누가 무엇을 언제 바꿨는지, 막아 낸 충돌) |
+| 변경 알림(`events`)·접속 정보(`presence`) | 1일·2분 | 다른 기기가 놓친 변경을 이어 받는 데만 씁니다 |
+
+- 품목·재고·입출고 기록·실사·출고 지시 같은 업무 데이터는 지우지 않습니다.
+- 지우기는 문서를 Worker로 읽어 오지 않고 저장소마다 쿼리 하나로 합니다(`Storage.deleteOlderThan`: `delete from docs where store = $1 and data->>'at' < $2`). 시각은 모두 `toISOString()` 형식이라 문자열 비교가 시간 순서와 같습니다.
+- 지운 수는 Workers 로그에 `[sog] 보관 기간 정리: 멱등 기록 n건, 활동 기록 n건, 변경 이력 n건`으로 남습니다.
 
 ## 로컬에서 실제 서버 모드로
 
@@ -119,6 +134,6 @@ pnpm preview:api   # http://localhost:4300, /api를 PGlite(메모리 Postgres) �
 
 - 데모라 비밀번호를 공개합니다. 실제 서비스라면 계정별 비밀번호 해시(예: Argon2)와 로그인 시도 제한, 짧은 토큰과 갱신, 토큰 폐기 목록이 필요합니다.
 - 데모 초기화(`POST /api/_reset`)는 관리자만 할 수 있습니다.
-- 요청 본문은 64KB까지 받고, 모든 입력은 업무 서버가 검증합니다(길이, 정수 범위, 상태 전이, 역할, 항목이 주소의 작업에 속하는지). 쿼리의 쪽 번호·개수는 정수 범위로 맞추고(개수 1~200), 깨진 주소는 404입니다.
+- 요청 본문은 64KB까지 받고, 모든 입력은 업무 서버가 검증합니다(길이, 정수 범위, 상태 전이, 역할, 항목이 주소의 작업에 속하는지). 쿼리의 쪽 번호·개수는 정수 범위로 맞추고(품목 한 쪽 1~500, 목록 1~200), 깨진 주소는 404입니다.
 - 처리하지 못한 오류는 500과 오류 코드 `INTERNAL`, 일반 문구로 답합니다. 내부 문구(DB 오류 등)는 응답에 싣지 않고 서버 로그에만 남깁니다.
-- 매일 초기화 예약 작업의 `CRON_SECRET`은 일정 시간에 비교합니다(두 값을 같은 임시 키의 HMAC으로 만든 뒤 비교).
+- 매일 예약 작업(`/api/cron/daily`, 예전 경로 `/api/cron/reset`)의 `CRON_SECRET`은 일정 시간에 비교합니다(두 값을 같은 임시 키의 HMAC으로 만든 뒤 비교).

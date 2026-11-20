@@ -93,6 +93,28 @@ export class Database {
     });
   }
 
+  /** 기록 시각(at)이 before보다 이른 문서를 한 트랜잭션에서 지우고 지운 수를 돌려줍니다. */
+  deleteOlderThan(store: StoreName, before: string): Promise<number> {
+    const tx = this.db.transaction(store, 'readwrite');
+    const cursor = tx.objectStore(store).openCursor();
+    let deleted = 0;
+    cursor.onsuccess = () => {
+      const current = cursor.result;
+      if (!current) return;
+      const at = (current.value as { at?: unknown }).at;
+      if (typeof at === 'string' && at < before) {
+        current.delete();
+        deleted++;
+      }
+      current.continue();
+    };
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(deleted);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('트랜잭션이 중단되었습니다.'));
+    });
+  }
+
   close(): void {
     this.db.close();
   }

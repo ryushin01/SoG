@@ -20,6 +20,7 @@ import type { Page, ShipmentOrder, SkuSummary } from '@sog/domain';
 import { idempotencyKey, SubmitLock, toApiError } from '@/shared/api';
 import { FieldErrors, Toaster } from '@/shared/ui';
 import { OrderApi } from '@/entities/order';
+import { skuOptionsRequest } from '@/entities/sku';
 import { Session } from '@/entities/user';
 
 interface OrderModel {
@@ -53,10 +54,7 @@ export class CreateOrderForm {
   private readonly key = idempotencyKey();
   protected readonly serverError = signal<string | null>(null);
 
-  protected readonly skus = httpResource<Page<SkuSummary>>(() => ({
-    url: '/api/skus',
-    params: { size: 100, sort: 'name' },
-  }));
+  protected readonly skus = httpResource<Page<SkuSummary>>(() => skuOptionsRequest());
   protected readonly skuList = computed(() =>
     this.skus.hasValue() ? this.skus.value().items : [],
   );

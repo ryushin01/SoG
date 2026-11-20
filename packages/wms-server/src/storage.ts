@@ -11,6 +11,11 @@ export interface Storage {
   getMany<T extends { id: string }>(store: StoreName, ids: readonly string[]): Promise<T[]>;
   all<T>(store: StoreName): Promise<T[]>;
   write(ops: WriteOp[]): Promise<void>;
+  /**
+   * 기록 시각(`at`, ISO 문자열)이 before보다 이른 문서를 지우고 지운 수를 돌려줍니다.
+   * 보관 기간 정리에 씁니다(Postgres는 문서를 읽어 오지 않고 쿼리 하나로 지움).
+   */
+  deleteOlderThan(store: StoreName, before: string): Promise<number>;
   close(): void;
 }
 

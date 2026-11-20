@@ -22,7 +22,7 @@ import { WmsHost } from '@/shared/api';
 import { NumPipe, WonPipe } from '@/shared/lib';
 import { PageHeader, StateMessage } from '@/shared/ui';
 import { LocationDirectory } from '@/entities/location';
-import { SkuArt, StockStatusBadge } from '@/entities/sku';
+import { SkuArt, skuOptionsRequest, StockStatusBadge } from '@/entities/sku';
 
 const STATUS_TEXT: Record<LocationStatus, string> = {
   empty: '비어 있음',
@@ -74,11 +74,8 @@ export class WarehouseMapPage {
     this.selectedId() ? `/api/locations/${encodeURIComponent(this.selectedId())}` : undefined,
   );
 
-  /** 품목 찾기: 고를 수 있는 품목(이름순, 데모는 48종이라 한 번에 받음) */
-  protected readonly skuOptions = httpResource<Page<SkuSummary>>(() => ({
-    url: '/api/skus',
-    params: { size: 100, sort: 'name' },
-  }));
+  /** 품목 찾기: 고를 수 있는 품목(이름순, 모두 한 번에 받음) */
+  protected readonly skuOptions = httpResource<Page<SkuSummary>>(() => skuOptionsRequest());
   protected readonly skuId = linkedSignal(() => this.sku() ?? '');
   protected readonly found = httpResource<SkuDetail>(() =>
     this.skuId() ? `/api/skus/${encodeURIComponent(this.skuId())}` : undefined,

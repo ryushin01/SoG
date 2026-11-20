@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-1.0.0-911a46)
+![version](https://img.shields.io/badge/version-1.1.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -9,7 +9,7 @@
 
 **[백오피스 보기](https://sog.ryushin01.workers.dev/)** · **[현장 실사 앱 보기](https://sog.ryushin01.workers.dev/count/)** · **[Storybook](https://sog.ryushin01.workers.dev/storybook/backoffice/)** · 데모 계정의 비밀번호는 모두 `sog-demo`입니다. 데이터는 서버(Postgres)에 있어서, 휴대폰으로 실사 앱을 열고 PC로 백오피스를 열면 센 수량과 피킹이 바로 나타납니다.
 
-> **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 운영 사이트는 Cloudflare Workers와 Neon(Postgres) 위의 실제 서버로, 개발 서버와 `pnpm preview`는 같은 코드를 브라우저 안(IndexedDB)에서 돌리는 데모 서버로 동작합니다. 품목·작업자·재고는 모두 가상 데이터이고, 매일 03:00(KST)에 처음 상태로 돌아갑니다.
+> **프로젝트 상태:** 실제 창고에 쓰지 않는 **포트폴리오 프로젝트**입니다. 운영 사이트는 Cloudflare Workers와 Neon(Postgres) 위의 실제 서버로, 개발 서버와 `pnpm preview`는 같은 코드를 브라우저 안(IndexedDB)에서 돌리는 데모 서버로 동작합니다. 품목·작업자·재고는 모두 가상 데이터(6개 구역 132칸, 10개 분류 120개 품목, 관리자 3명·작업자 6명, 60일치 입출고 기록, [구성](docs/development.md#개발-서버))이고, 매일 03:00(KST)에 처음 상태로 돌아갑니다.
 
 ## 화면
 
@@ -21,11 +21,11 @@
 
 | 출고 지시 | 현장 앱 피킹 |
 |---|---|
-| ![한빛리테일 출고 지시의 피킹 동선 표, 위에 현장 앱의 이서준이 물티슈 앞에 있다는 접속 표시](docs/images/backoffice-order.jpg) | ![휴대폰 화면의 피킹 동선, 첫 로케이션이 펼쳐져 수량 4와 집음 확인 버튼이 보임](docs/images/count-pick.jpg) |
+| ![한빛리테일 출고 지시의 피킹 동선 표, 위에 현장 앱의 이서준이 A-04-02-2 절연 장갑 L 앞에 있다는 접속 표시](docs/images/backoffice-order.jpg) | ![휴대폰 화면의 피킹 동선, 첫 로케이션은 8/8 집음이고 다음 로케이션이 펼쳐져 수량 4와 집음 확인 버튼이 보임](docs/images/count-pick.jpg) |
 
 | 변경 이력 | 백오피스 로그인 |
 |---|---|
-| ![품목의 변경 이력. 박도윤이 안전 재고를 30에서 40으로 바꾼 v2 기록 위에, 김하늘의 25 입력이 버전 충돌로 막힌 기록과 이 값으로 다시 버튼](docs/images/backoffice-history.jpg) | ![김하늘·박도윤 관리자 계정 선택, 비밀번호 칸과 데모 비밀번호 sog-demo 안내가 있는 로그인 화면](docs/images/backoffice-login.jpg) |
+| ![품목의 변경 이력. 박도윤이 안전 재고를 60에서 40으로 바꾼 v2 기록 위에, 김하늘의 25 입력이 버전 충돌로 막힌 기록과 이 값으로 다시 버튼](docs/images/backoffice-history.jpg) | ![김하늘·박도윤·서예린 관리자 계정 선택, 비밀번호 칸과 데모 비밀번호 sog-demo 안내가 있는 로그인 화면](docs/images/backoffice-login.jpg) |
 
 | 현장 앱 품목 실사 | 오프라인 보낼함 |
 |---|---|
@@ -94,7 +94,7 @@ pnpm dev    # 백오피스 http://localhost:4200 · 실사 앱 http://localhost:
 | `pnpm test:storybook` | 모든 스토리를 실제 브라우저에서 렌더링하고 접근성 검사 |
 | `pnpm site` → `pnpm size` / `pnpm lhci` | 배포 구조로 합친 뒤 번들 크기 / Lighthouse 기준 검사 (먼저 `build` 필요) |
 | `pnpm e2e` | 프로덕션 빌드 E2E, 데모 모드(데스크톱·모바일)와 실제 서버 모드 (`E2E_BASE_URL`을 주면 배포된 사이트 검사) |
-| `pnpm --dir e2e screenshots` | README 화면 다시 찍기 (먼저 `build`, 브라우저 안 데모 서버의 가상 데이터) |
+| `pnpm --dir e2e screenshots` | README·디자인 문서 화면과 두 앱의 공유 미리보기(OG) 이미지 다시 찍기 (먼저 `build`, 브라우저 안 데모 서버의 가상 데이터) |
 | `pnpm typecheck` / `pnpm lint` | 타입 검사 / ESLint와 FSD 규칙 검사(Steiger) |
 | `pnpm --filter @sog/backoffice storybook` | 백오피스 Storybook (`http://localhost:6006`) |
 

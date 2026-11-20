@@ -112,8 +112,13 @@ export interface ApiOptions {
   now?: () => Date;
   /** 로그인 토큰 서명 키(운영은 AUTH_SECRET) */
   authSecret: string;
-  /** 매일 밤 초기화(Cloudflare Cron Trigger)를 부를 때 쓰는 키(CRON_SECRET). 없으면 /api/cron/reset을 막습니다. */
+  /** 매일 예약 작업(Cloudflare Cron Trigger)을 부를 때 쓰는 키(CRON_SECRET). 없으면 /api/cron/*을 막습니다. */
   cronSecret?: string;
+  /**
+   * 매일 예약 작업이 데모 데이터를 처음 상태로 되돌릴지(기본 켬, 운영은 DEMO_RESET=off로 끔).
+   * 끄면 데이터는 그대로 두고 보관 기간이 지난 기록만 지웁니다(RETENTION_DAYS).
+   */
+  demoReset?: boolean;
 }
 
 export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Promise<ApiHandler> {
@@ -264,12 +269,31 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
     return json(200, { cursor, items, peers: row?.peers ?? [] });
   }
 
+  /**
+   * 매일 예약 작업. 하루 지난 변경 알림과 끊긴 접속 정보를 지운 뒤(요청 중에 가끔 하던 정리를 날마다 확실히),
+   * 데모 모드면 처음 상태로 되돌리고, 초기화를 끈 운영이면 보관 기간이 지난 기록만 지웁니다.
+   */
+  async function daily(): Promise<Response> {
+    await db.query("delete from events where at < now() - interval '1 day'");
+    await db.query("delete from presence where seen_at < now() - interval '2 minutes'");
+    const server = await getServer();
+    if (options.demoReset !== false) {
+      await server.reset();
+      return json(200, { reset: true });
+    }
+    const pruned = await server.prune();
+    console.log(
+      `[sog] 보관 기간 정리: 멱등 기록 ${pruned.idempotency}건, 활동 기록 ${pruned.activity}건, 변경 이력 ${pruned.history}건`,
+    );
+    return json(200, { pruned });
+  }
+
   return {
     async handle(request) {
       const url = new URL(request.url);
       try {
         if (url.pathname === '/api/health') return json(200, { mode: 'remote' });
-        if (url.pathname === '/api/cron/reset') {
+        if (url.pathname === '/api/cron/reset' || url.pathname === '/api/cron/daily') {
           // 예약 작업(Worker의 scheduled)이 Authorization: Bearer <CRON_SECRET>을 붙여 부릅니다.
           if (
             !options.cronSecret ||
@@ -280,6 +304,7 @@ export async function createApiHandler(db: SqlDatabase, options: ApiOptions): Pr
           ) {
             return json(401, { code: 'UNAUTHENTICATED', message: '예약 작업만 부를 수 있습니다.' });
           }
+          if (url.pathname === '/api/cron/daily') return await daily();
           await (await getServer()).reset();
           return json(200, { reset: true });
         }
