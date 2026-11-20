@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-1.1.1-911a46)
+![version](https://img.shields.io/badge/version-1.2.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -106,7 +106,7 @@ apps/
 └─ count/        현장 재고 실사 PWA (FSD)
 packages/
 ├─ domain/       타입, 재고 규칙, 실사 정산, 품목 그림(SVG)
-├─ wms-server/   업무 서버 코드(규칙, 버전 검사, 예약). 저장소를 갈아 끼워 브라우저·서버에서 함께 씀
+├─ wms-server/   업무 서버 코드(core: 공통 처리·조회 모델, routes: 품목·실사·출고). 저장소를 갈아 끼워 브라우저·서버에서 함께 씀
 ├─ wms-api/      실제 서버(/api): Postgres 저장소, 변경 피드, 접속 표시, Cloudflare Worker 진입점
 └─ wms-client/   Angular HTTP 연결, 변경 알림, 접속 표시, 네트워크 상태, 중복 제출 잠금
 e2e/             프로덕션 빌드 E2E
