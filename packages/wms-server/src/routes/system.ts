@@ -1,5 +1,6 @@
 /** 기준 정보·로그인·운영 현황·창고 도면·활동 기록·데모 초기화 */
-import type { Activity, LoginRequest, LoginResponse } from '@sog/domain';
+import { check, type Activity, type LoginResponse } from '@sog/domain';
+import { loginRequestSchema } from '@sog/domain/requests';
 import { DEMO_PASSWORD, issueToken } from '../auth';
 import { intParam, json, MAX_LIST_LIMIT } from '../core/http';
 import type { ServerScope } from '../core/scope';
@@ -23,10 +24,12 @@ export function systemRoutes(scope: ServerScope, views: Views): Route[] {
       'POST',
       '/api/auth/login',
       async (ctx) => {
-        const body = (ctx.body ?? {}) as Partial<LoginRequest>;
-        const user = (await load.users()).find((u) => u.id === body.userId);
-        // 데모 계정의 비밀번호는 공개 값입니다(로그인 화면에 안내). 계정이 없거나 틀리면 같은 문구로 답합니다.
-        if (!user || typeof body.password !== 'string' || body.password !== DEMO_PASSWORD) {
+        const login = check(loginRequestSchema(), ctx.body);
+        const user = login.ok
+          ? (await load.users()).find((u) => u.id === login.value.userId)
+          : undefined;
+        // 데모 계정의 비밀번호는 공개 값입니다(로그인 화면에 안내). 본문이 맞지 않거나 계정이 없거나 틀리면 같은 문구로 답합니다.
+        if (!login.ok || !user || login.value.password !== DEMO_PASSWORD) {
           throw new HttpError(401, 'UNAUTHENTICATED', '계정이나 비밀번호가 맞지 않습니다.');
         }
         const { token, expiresAt } = await issueToken(authSecret, user.id, nowSeconds());

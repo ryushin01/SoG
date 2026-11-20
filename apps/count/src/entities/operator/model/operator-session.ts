@@ -1,16 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import type { Reference, User } from '@sog/domain';
-import { AuthSession, Presence } from '@/shared/api';
+import { userListSchema, type Reference, type User } from '@sog/domain';
+import { AuthSession, Presence, readStored } from '@/shared/api';
 
 const USERS_KEY = 'sog:count:users';
 
+/** 기기에 남은 사용자 목록(오프라인 로그인용). 깨졌거나 옛 형식이면 빈 목록입니다. */
 function readUsers(): User[] {
-  try {
-    return JSON.parse(localStorage.getItem(USERS_KEY) ?? '[]') as User[];
-  } catch {
-    return [];
-  }
+  return readStored(() => localStorage, USERS_KEY, userListSchema()) ?? [];
 }
 
 /**

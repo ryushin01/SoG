@@ -1,16 +1,14 @@
 /** 품목(목록·상세·변경 이력·수정), 재고 조정, 입출고 */
 import {
   available,
-  type AdjustRequest,
   type HistoryEntry,
   type Location,
   type Movement,
-  type MovementRequest,
   type Sku,
-  type SkuPatch,
   type StockLevel,
 } from '@sog/domain';
-import { intParam, json, MAX_LIST_LIMIT, positiveInt, text } from '../core/http';
+import { adjustRequestSchema, movementRequestSchema, skuPatchSchema } from '@sog/domain/requests';
+import { intParam, json, MAX_LIST_LIMIT, parseBody } from '../core/http';
 import type { Mutate } from '../core/mutate';
 import type { ServerScope } from '../core/scope';
 import { HttpError, type Context, type MutationResult, type Route } from '../core/types';
@@ -21,13 +19,10 @@ export function skuRoutes(scope: ServerScope, views: Views, mutate: Mutate): Rou
   const { db, load, mustGet, newId, now, requireVersion, touch } = scope;
   const { listSkus, skuDetail } = views;
 
-  async function createMovement(ctx: Context, request: MovementRequest): Promise<MutationResult> {
-    if (!request || !['receipt', 'shipment', 'transfer'].includes(request.type)) {
-      throw new HttpError(400, 'VALIDATION', '이동 유형을 선택해 주세요.');
-    }
+  async function createMovement(ctx: Context, body: unknown): Promise<MutationResult> {
+    const request = parseBody(movementRequestSchema(), body);
     const sku = await mustGet<Sku>('skus', request.skuId, '품목');
-    const qty = positiveInt(request.qty, '수량');
-    const reason = text(request.reason, '사유', 100);
+    const { qty, reason } = request;
     const stocks = (await load.stocks()).filter((stock) => stock.skuId === sku.id);
     const locations = await load.locations();
     const codeOf = (id: string) => locations.find((location) => location.id === id)?.code;
@@ -97,8 +92,7 @@ export function skuRoutes(scope: ServerScope, views: Views, mutate: Mutate): Rou
       qty,
       delta: 0,
       reason,
-      ref:
-        'ref' in request && request.ref ? text(request.ref, '참조 번호', 40, false) || null : null,
+      ref: 'ref' in request && request.ref ? request.ref : null,
       at,
       by: ctx.user.id,
     };
@@ -141,23 +135,14 @@ export function skuRoutes(scope: ServerScope, views: Views, mutate: Mutate): Rou
         mutate(ctx, `sku:${id}`, async () => {
           const sku = await mustGet<Sku>('skus', id!, '품목');
           await requireVersion(ctx, sku, () => skuDetail(id!));
-          const patch = (ctx.body ?? {}) as SkuPatch;
+          const patch = parseBody(skuPatchSchema(), ctx.body);
           const next = touch(
             {
               ...sku,
-              name: patch.name !== undefined ? text(patch.name, '품목명', 60) : sku.name,
-              safetyStock:
-                patch.safetyStock !== undefined
-                  ? positiveInt(patch.safetyStock, '안전 재고', true)
-                  : sku.safetyStock,
-              unitCost:
-                patch.unitCost !== undefined
-                  ? positiveInt(patch.unitCost, '단가', true)
-                  : sku.unitCost,
-              description:
-                patch.description !== undefined
-                  ? text(patch.description, '설명', 500, false)
-                  : sku.description,
+              name: patch.name ?? sku.name,
+              safetyStock: patch.safetyStock ?? sku.safetyStock,
+              unitCost: patch.unitCost ?? sku.unitCost,
+              description: patch.description ?? sku.description,
             },
             ctx.user,
           );
@@ -183,9 +168,7 @@ export function skuRoutes(scope: ServerScope, views: Views, mutate: Mutate): Rou
         mutate(ctx, `adjust:${id}`, async () => {
           const stock = await mustGet<StockLevel>('stocks', id!, '재고');
           await requireVersion(ctx, stock, () => skuDetail(stock.skuId));
-          const body = (ctx.body ?? {}) as AdjustRequest;
-          const onHand = positiveInt(body.onHand, '수량', true);
-          const reason = text(body.reason, '조정 사유', 100);
+          const { onHand, reason } = parseBody(adjustRequestSchema(), ctx.body);
           const delta = onHand - stock.onHand;
           if (delta === 0) throw new HttpError(400, 'VALIDATION', '현재 수량과 같습니다.');
           if (onHand < stock.reserved) {
@@ -232,7 +215,7 @@ export function skuRoutes(scope: ServerScope, views: Views, mutate: Mutate): Rou
     [
       'POST',
       '/api/movements',
-      (ctx) => mutate(ctx, 'movements', () => createMovement(ctx, ctx.body as MovementRequest)),
+      (ctx) => mutate(ctx, 'movements', () => createMovement(ctx, ctx.body)),
     ],
     [
       'GET',

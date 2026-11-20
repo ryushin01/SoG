@@ -1,15 +1,15 @@
 [
   {
-    "name": "백오피스 첫 화면 main(데모 서버·폼 제외)",
+    "name": "백오피스 첫 화면 main(데모 서버·폼 제외, 저장값 확인 zod 포함)",
     "path": "apps/backoffice/dist/browser/main-*.js",
     "gzip": true,
-    "limit": "54 kB"
+    "limit": "63 kB"
   },
   {
     "name": "백오피스 전체 JS",
     "path": "apps/backoffice/dist/browser/*.js",
     "gzip": true,
-    "limit": "255 kB"
+    "limit": "265 kB"
   },
   {
     "name": "백오피스 CSS",
@@ -27,7 +27,7 @@
     "name": "현장 앱 전체 JS",
     "path": "apps/count/dist/browser/*.js",
     "gzip": true,
-    "limit": "230 kB"
+    "limit": "240 kB"
   },
   {
     "name": "현장 앱 CSS",

@@ -13,6 +13,7 @@ export { idempotencyKey, ifMatch, isVersionConflict, SubmitLock, toApiError } fr
 export { wmsInterceptor } from './interceptor';
 export { NetworkState } from './network';
 export { type Peer, Presence, PRESENCE_APP, type PresenceState } from './presence';
+export { readStored } from './stored';
 
 /**
  * HttpClient와 서버 연결을 한 번에 등록합니다.

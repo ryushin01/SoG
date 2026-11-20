@@ -6,6 +6,7 @@ export {
   NetworkState,
   Presence,
   provideWmsClient,
+  readStored,
   reloadOnStaleChunk,
   seedTestSession,
   SubmitLock,

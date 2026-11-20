@@ -1,5 +1,5 @@
 import { DestroyRef, inject, Injectable, InjectionToken, signal } from '@angular/core';
-import type { ChangeEvent } from '@sog/domain';
+import { check, healthSchema, type ChangeEvent } from '@sog/domain';
 import type { WmsServer, WmsServerOptions } from '@sog/wms-server';
 import { LiveSync } from './live';
 
@@ -148,8 +148,8 @@ async function checkMode(): Promise<WmsMode | null> {
       signal: AbortSignal.timeout(4000),
     });
     if (response.ok) {
-      const body = (await response.json()) as { mode?: string };
-      const mode: WmsMode = body.mode === 'remote' ? 'remote' : 'local';
+      const body = check(healthSchema(), await response.json());
+      const mode: WmsMode = body.ok && body.value.mode === 'remote' ? 'remote' : 'local';
       writeMode(mode);
       return mode;
     }

@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@sog/domain": ["../../packages/domain/src/index.ts"],
+      "@sog/domain/requests": ["../../packages/domain/src/request-schemas.ts"],
       "@sog/wms-server": ["../../packages/wms-server/src/index.ts"],
       "@/*": ["./src/*"],
       "@sog/wms-client": ["../../packages/wms-client/src/index.ts"],
