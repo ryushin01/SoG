@@ -30,11 +30,12 @@ pnpm fonts           # 화면 글자를 바꾸면 한글 글꼴 조각 다시 �
 ```
 
 - 환경 변수·비밀(이름만): `SENTRY_DSN`(빌드 때, 선택), Worker Secret `AUTH_SECRET`·`CRON_SECRET`, `wrangler.jsonc`의 `vars.DEMO_RESET`, 저장소 Secret `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID`
-- 개발 서버와 `pnpm preview`는 브라우저 안 데모 서버(IndexedDB), 운영은 실제 서버 모드입니다. 시드 구성을 바꾸면 `server.ts`의 `SEED_VERSION`을 올립니다.
+- 개발 서버와 `pnpm preview`는 브라우저 안 데모 서버(IndexedDB), 운영은 실제 서버 모드입니다. 시드 구성을 바꾸면 `packages/wms-server/src/server.ts`의 `SEED_VERSION`을 올립니다.
+- 오프라인 대체: 공개 데모(`DEMO_RESET=on`)의 `/api/health`가 DB에 3초 안에 닿지 못하면 503 `{"mode":"local","code":"DB_UNAVAILABLE"}`로 답하고, 앱은 브라우저 안 데모 서버로 바꿔(`WmsHost.fallback`) 화면 위에 `role="status"` 안내를 띄웁니다. 실제 운영(`DEMO_RESET=off`)은 DB에 묻지 않고 오류를 그대로 보입니다. 자세히: `docs/backend.md`.
 
 ## 4. 검사·테스트 명령
 
-CI(`.github/workflows/ci.yml`)는 이 순서로 돕니다. 커밋 때 husky가 lint-staged(ESLint·Prettier)와 `pnpm typecheck`를 돌립니다.
+CI(`.github/workflows/ci.yml`, `main` 푸시·모든 PR·수동 실행)의 `check` 작업은 이 순서로 돕니다. 커밋 때 husky가 lint-staged(ESLint·Prettier)와 `pnpm typecheck`를 돌립니다.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -45,22 +46,22 @@ pnpm test                # Vitest: 업무 서버·실제 서버(PGlite)·도메�
 pnpm --filter @sog/e2e exec playwright install --with-deps chromium
 pnpm test:storybook      # 모든 스토리를 Chromium에서 렌더링 + axe(a11y.test: 'error')
 pnpm build
-pnpm e2e                 # 프로덕션 빌드를 / · /count/로 합쳐 데모 모드(데스크톱·모바일) + 실제 서버 모드
+pnpm e2e                 # 프로덕션 빌드를 / · /count/로 합쳐 데모 모드(데스크톱·모바일) + 실제 서버 모드 + 오프라인
 pnpm site && pnpm size && pnpm lhci   # 번들 예산(.size-limit.json), Lighthouse(성능 90·접근성 100)
 ```
 
-- **Testing Library 원칙:** 구현 세부가 아니라 사용자가 보는 동작을 검사하고, 요소는 역할·이름(`getByRole`)이나 레이블(`getByLabelText`)로 찾습니다. 도구는 단위·컴포넌트 Vitest + `@testing-library/angular`(+ `user-event`, jsdom, fake-indexeddb), 화면 흐름 Playwright E2E, 접근성 `@axe-core/playwright`와 Storybook `addon-a11y`입니다.
+- **Testing Library 원칙:** 구현 세부가 아니라 사용자가 보는 동작을 검사하고, 요소는 역할·이름(`getByRole`)이나 레이블(`getByLabelText`)로 찾습니다. 버그를 고치면 고치기 전에 실패하는 테스트를 함께 넣습니다. 도구는 단위·컴포넌트 Vitest + `@testing-library/angular`(+ `user-event`, jsdom, fake-indexeddb), 화면 흐름 Playwright E2E, 접근성 `@axe-core/playwright`와 Storybook `addon-a11y`입니다.
+- `e2e/tests/offline.spec.ts`는 localhost 밖 요청을 모두 막고 두 앱이 데이터와 함께, axe 위반·외부 요청 없이 열리는지와 `DB_UNAVAILABLE` 때 데모 데이터·안내로 넘어가는지 봅니다.
 - 컴포넌트 테스트는 가짜 HTTP 대신 진짜 데모 서버를 fake-indexeddb 위에 띄웁니다. 로그인이 필요하면 `seedTestSession(user)`를 씁니다.
 - 배포된 사이트 검사: `E2E_BASE_URL=https://sog.ryushin01.workers.dev pnpm --filter @sog/e2e exec playwright test`(서버 데이터를 초기화하므로 다른 사람이 쓸 때는 돌리지 않음)
 
 ## 5. 코드 스타일
 
-- **TypeScript strict**(`tsconfig.base.json`, `tsconfig.angular.json`의 `"strict": true`)를 유지하고 `any`·`as` 단언·`@ts-ignore`는 피합니다. 외부 입력(요청 본문, 기기 저장값, 로그인 응답)은 zod 스키마(`@sog/domain`)로 확인합니다.
-- **Prettier**(`.prettierrc.json`: `printWidth: 100`, `singleQuote`, `semi`, `trailingComma: all`, HTML은 `angular` 파서)와 `.editorconfig`, ESLint(`--max-warnings 0`, `simple-import-sort`)를 따릅니다. Biome는 쓰지 않습니다.
+- TypeScript strict(`tsconfig.base.json`, `tsconfig.angular.json`), `any`·`as` 단언·`@ts-ignore` 금지. 외부 입력(요청 본문, 기기 저장값, 로그인 응답)은 zod 스키마(`@sog/domain`)로 확인합니다.
+- 서식은 Prettier(`.prettierrc.json`: `printWidth: 100`, `singleQuote`, `semi`, `trailingComma: all`, HTML은 `angular` 파서)와 `.editorconfig`, 린트는 ESLint(`--max-warnings 0`, `simple-import-sort`)를 따릅니다.
 - Angular 규칙: NgModule·`*ngIf` 없음, 상태는 `signal`·`computed`, 입력은 `input()`·`model()`, 출력은 `output()`, 모든 컴포넌트 `OnPush`. 오류 상태인 `resource`는 `hasValue()`를 먼저 확인합니다.
 - 브라우저 안 데모 서버(`@sog/wms-server`)는 앱 코드에서 정적으로 가져오지 않습니다(`import()`로만, 테스트 제외).
-- 접근성(**WCAG 2.2·KWCAG 2.2**): axe 통과만으로 끝내지 않고 `docs/development.md`의 KWCAG 점검표를 지킵니다. 네이티브 요소(`<dialog>`, `<button>`) 우선, 글자 대비 4.5:1 이상, 키보드 조작과 초점 표시, 화면 전환 시 제목으로 초점 이동, 조작 크기 백오피스 40px·실사 앱 48px 이상(최소 24px), 모든 입력에 보이는 `label`, 오류는 `aria-invalid`·`aria-describedby`, 화면 전환 없는 안내는 `role="status"`, 본문 바로가기, 화면마다 고유 제목. 자동 검사는 angular-eslint `templateAccessibility`(React용 eslint-plugin-jsx-a11y 대신), Storybook·Playwright의 axe, Lighthouse 접근성 100점 하한입니다.
-- 버그를 고치면 고치기 전에 실패하는 테스트를 함께 넣습니다.
+- 접근성(**WCAG 2.2·KWCAG 2.2**): axe 통과만으로 끝내지 않고 `docs/development.md`의 KWCAG 점검표를 지킵니다. 공통 규칙에 더해 화면 전환 시 제목으로 초점 이동, 조작 크기 백오피스 40px·실사 앱 48px 이상(최소 24px). 자동 검사는 angular-eslint `templateAccessibility`(React용 eslint-plugin-jsx-a11y 대신), Storybook·Playwright의 axe, Lighthouse 접근성 100점 하한입니다.
 
 ## 6. Git·PR
 
@@ -70,7 +71,7 @@ pnpm site && pnpm size && pnpm lhci   # 번들 예산(.size-limit.json), Lightho
 - 본문은 한국어 목록으로 적습니다.
 - **작성자:** 커밋 작성자는 항상 ryushin01(`ryushin0 <141554987+ryushin01@users.noreply.github.com>`)입니다(기여자는 ryushin01만 남김). 백엔드 코드가 있는 저장소라 공동 작성자 줄은 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` 하나만 넣습니다.
 - GitHub Actions가 커밋하는 워크플로는 작성자를 ryushin01로 설정합니다(`github-actions[bot]` 금지). Dependabot PR은 그대로 병합하지 말고 같은 변경을 ryushin01 커밋으로 다시 만들어 병합합니다.
-- **버전: Semantic Versioning.** 모든 앱·패키지의 `package.json` `version`(`apps/*`, `packages/*`, 지금 1.4.0)과 README 버전 배지를 한 번에 맞춥니다(루트 `package.json`에는 버전이 없음).
+- **버전: Semantic Versioning.** 모든 앱·패키지의 `package.json` `version`(`apps/*`, `packages/*`, `e2e`)과 README 버전 배지를 한 번에 맞춥니다(루트 `package.json`에는 버전이 없음).
 - **변경 기록: Keep a Changelog 기반.** `CHANGELOG.md`(제목 `# 버전 기록`)에 최신 버전을 위에 두고 `## x.y.z - YYYY-MM-DD` 아래 요약 한 줄과 `- 주제: 내용` 목록으로 적습니다. `[Unreleased]` 절과 추가·변경·수정·제거 소제목은 쓰지 않습니다(표준과 다른 점).
 - **병합:** merge commit(`Merge pull request #번호 …`)입니다. CI가 통과하면 바로 병합하고 CodeRabbit 리뷰는 기다리지 않습니다. 이미 달린 맞는 지적은 반영한 뒤 병합합니다.
 - 의존성 빌드 스크립트는 `pnpm-workspace.yaml`의 `allowBuilds`에 허용한 것만 돕니다(새 의존성 뒤 `pnpm ignored-builds`로 확인).
@@ -92,11 +93,15 @@ pnpm site && pnpm size && pnpm lhci   # 번들 예산(.size-limit.json), Lightho
 - 데모라 비밀번호를 공개합니다. 실제 서비스로 바꿀 때 필요한 것은 `docs/backend.md`의 `알려 둘 점`에 있습니다.
 - 배포 구조의 라우팅(`not_found_handling: none`, `run_worker_first`)과 Storybook 넘김 규칙은 이유가 있어 둔 것이니 `docs/ci-deploy.md`를 읽고 고칩니다.
 
+- CI·배포·릴리스 상태는 명령 결과(`gh run`, `gh release`, `curl`)로 확인한 것만 말합니다.
+- 먼저 묻기: 새 런타임 의존성, 빌드·배포 설정(`angular.json`, `turbo.json`, `wrangler.jsonc`, `tsconfig*.json`, `scripts/build-cloudflare.mjs`) 변경, 운영 DB 데이터에 영향을 주는 변경.
+- 절대 금지: 비밀값을 앱 번들(빌드 때 넣는 값)에 넣기, `.env` 커밋, `eslint-disable`·`--no-verify`로 검사 우회, `main` 직접 푸시.
+
 ## 9. 공통 규칙
 
-공통 규칙은 `~/Documents/GitHub/CLAUDE.md`에 있습니다(이 저장소 문서가 우선). 핵심:
+규칙은 3계층입니다. 1층 전역(`~/.claude/CLAUDE.md`, OpenCode는 `~/.config/opencode/AGENTS.md`로 같은 파일) → 2층 ryushin01 공통(`~/Documents/GitHub/CLAUDE.md`, Claude Code만 읽음) → 3층 이 파일. 충돌하면 이 파일이 우선합니다. 2층을 읽지 못하는 도구를 위해 핵심을 아래에 요약합니다.
 
 - 답변·커밋·PR·문서·주석은 한국어로 씁니다.
-- 허락을 묻지 않고 끝까지 진행한 뒤 한 번에 보고합니다(비용·비밀값·디자인 결정·되돌릴 수 없는 공개 행동은 보고만).
+- 허락을 묻지 않고 끝까지 진행한 뒤 한 번에 보고합니다. 비용이 드는 일, 비밀값 새로 만들기, 디자인 결정, 되돌리기 어려운 일, 다른 조직 저장소에 공개로 글 올리기는 진행 전에 보고하고 결정을 받습니다.
 - 사용자의 진행 중 작업을 보호합니다. 커밋하지 않은 변경이 있으면 `git worktree add`로 따로 작업하고 끝나면 지웁니다.
-- 다른 세션 공지는 ryushin01 그룹 세션에만 보냅니다.
+- 다른 세션 공지는 ryushin01 그룹 세션에만 보냅니다(Etc 그룹·다른 계정 세션 제외).
