@@ -68,11 +68,30 @@ afterEach(async () => {
 });
 
 describe('Cloudflare Worker 진입점', () => {
-  it('상태 확인은 DB를 열지 않고 실제 서버 모드라고 답한다', async () => {
-    const response = await get('/api/health');
+  it('실제 운영(DEMO_RESET=off)의 상태 확인은 DB를 열지 않고 실제 서버 모드라고 답한다', async () => {
+    const response = await get('/api/health', env({ DEMO_RESET: 'off' }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ mode: 'remote' });
     expect(opened).toBe(0);
+  });
+
+  it('공개 데모의 상태 확인은 DB에 닿으면 실제 서버 모드라고 답하고 연결을 닫는다', async () => {
+    const response = await get('/api/health');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ mode: 'remote' });
+    expect(log).toEqual(['1:select 1', '1:close']);
+  });
+
+  it('공개 데모의 상태 확인은 DB가 끊겼으면 503으로 앱이 브라우저 안 데모 서버를 쓰게 한다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    worker = createWorker(() => ({
+      query: () => Promise.reject(new Error('connect ECONNREFUSED')),
+      transaction: () => Promise.reject(new Error('connect ECONNREFUSED')),
+      close: async () => undefined,
+    }));
+    const response = await get('/api/health');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ mode: 'local', code: 'DB_UNAVAILABLE' });
   });
 
   it('Hyperdrive가 없으면 503으로 앱이 브라우저 안 데모 서버를 쓰게 한다', async () => {

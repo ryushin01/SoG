@@ -34,6 +34,20 @@ describe('WmsHost.ready', () => {
     expect(localStorage.getItem('sog:mode')).toBe('local');
   });
 
+  it('공개 데모에서 DB가 끊겼다고(503, DB_UNAVAILABLE) 알리면 데모 모드로 대신 보여 주며 표시한다', async () => {
+    const host = hostWith(
+      Response.json({ mode: 'local', code: 'DB_UNAVAILABLE' }, { status: 503 }),
+    );
+    expect(await host.ready()).toBe('local');
+    expect(host.fallback()).toBe(true);
+  });
+
+  it('DB를 붙이지 않은 배포(503, 본문 없음)는 대신 보여 주는 중으로 표시하지 않는다', async () => {
+    const host = hostWith(new Response(null, { status: 503 }));
+    expect(await host.ready()).toBe('local');
+    expect(host.fallback()).toBe(false);
+  });
+
   it('기억한 모드가 있으면 상태 확인을 기다리지 않고 바로 시작한다', async () => {
     localStorage.setItem('sog:mode', 'remote');
     vi.stubGlobal(

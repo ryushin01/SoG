@@ -63,6 +63,14 @@
   }
 
   <div class="body">
+    <div role="status" class="fallback">
+      @if (host.fallback()) {
+        <p class="fallback__text">
+          지금은 서버 DB에 연결되지 않아, 이 브라우저 안의 데모 서버와 데모 데이터로 보여 드립니다.
+          저장한 내용은 이 브라우저에만 남습니다.
+        </p>
+      }
+    </div>
     @if (auth.signedIn()) {
       <div class="bar">
         <sog-remote-change-notifier />

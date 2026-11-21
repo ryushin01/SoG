@@ -5,6 +5,7 @@ import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs';
 import { OperatorSession } from '@/entities/operator';
 import { SyncStatus } from '@/features/sync-outbox';
+import { WmsHost } from '@/shared/api';
 import { UnsavedWork } from '@/shared/lib';
 
 /** 현장 앱 틀: 본문 바로가기, 위쪽 상태 막대, 엄지로 닿는 아래쪽 탭 */
@@ -26,6 +27,13 @@ import { UnsavedWork } from '@/shared/lib';
         <cnt-sync-status />
       </div>
     </header>
+    <div role="status">
+      @if (host.fallback()) {
+        <p class="fallback">
+          지금은 서버 DB에 연결되지 않아, 이 기기 안의 데모 서버와 데모 데이터로 보여 드립니다.
+        </p>
+      }
+    </div>
     @if (updateReady()) {
       <div class="update" role="status">
         <p>
@@ -113,6 +121,13 @@ import { UnsavedWork } from '@/shared/lib';
       font-size: 0.875rem;
       font-weight: 600;
     }
+    .fallback {
+      margin: 0;
+      padding: 0.75rem var(--gutter);
+      background: var(--warn-soft);
+      color: var(--warn);
+      font-size: 0.875rem;
+    }
     .update {
       display: flex;
       flex-wrap: wrap;
@@ -159,6 +174,7 @@ import { UnsavedWork } from '@/shared/lib';
 })
 export class AppFrame {
   protected readonly session = inject(OperatorSession);
+  protected readonly host = inject(WmsHost);
   private readonly document = inject(DOCUMENT);
   /** 아래쪽 탭의 현재 구역. 작업 목록·작업·품목 화면은 모두 실사 작업 탭입니다. */
   protected readonly section = signal<'tasks' | 'picks' | 'settings' | null>(null);

@@ -74,6 +74,8 @@ pnpm dev
 
 개발 서버는 데모 모드(브라우저 안 데모 서버)로 동작합니다. 실제 서버 모드는 `pnpm preview:api`로 확인합니다([실제 서버](backend.md)).
 
+`.env`나 비밀값 없이 `pnpm install` → `pnpm dev`(또는 `pnpm build` → `pnpm preview`)만으로 두 앱이 데모 데이터로 돌고, 인터넷이 끊겨도 됩니다. 글꼴은 저장소의 조각 파일(`pnpm fonts`)이고, Sentry는 `SENTRY_DSN`을 넣고 빌드했을 때만 켜지며 보내기에 실패해도 화면에 영향이 없습니다. `e2e/tests/offline.spec.ts`가 localhost 밖 요청을 모두 막은 상태에서 백오피스·실사 앱 주요 화면이 데이터와 함께 열리는지, axe 위반과 외부 요청이 없는지 보고, 공개 데모에서 DB가 끊겼을 때(상태 확인 503·`DB_UNAVAILABLE`) 데모 데이터와 안내로 넘어가는지도 확인합니다.
+
 데모 데이터는 백오피스 머리글의 "데모 초기화"로 처음 상태로 되돌립니다. 시드(`packages/wms-server/src/seed.ts`)는 고정 난수로 만들어 언제 초기화해도 구성이 같고, 날짜만 초기화 시점을 기준으로 합니다.
 
 | 자료 | 구성 |
