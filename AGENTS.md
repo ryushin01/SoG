@@ -4,7 +4,7 @@
 
 물류창고 재고를 관리하는 백오피스와 창고 현장에서 재고 실사·피킹을 하는 작업자용 PWA를 담은 모노레포입니다. 동시 수정·실사 중 입출고·마지막 재고 경쟁·오프라인에서도 재고가 어긋나지 않게 하는 동시성 제어가 핵심입니다.
 
-- 화면 축 2개: 백오피스(웹, `apps/backoffice`, 주소 `/`) · 창고 실사 앱(작업자용 PWA, `apps/count`, 주소 `/count/`)
+- 화면 축: 백오피스(웹, `apps/backoffice`, 주소 `/`) · 창고 실사 앱(작업자용 PWA, `apps/count`, 주소 `/count/`)
 - 운영: 백오피스 https://sog.ryushin01.workers.dev/ · 실사 앱 https://sog.ryushin01.workers.dev/count/ · Storybook https://sog.ryushin01.workers.dev/storybook/backoffice/, `/storybook/count/`
 - 데모 계정 비밀번호는 모두 `sog-demo`(관리자는 백오피스, 작업자는 실사 앱). 데이터는 매일 03:00(KST) 처음 상태로 돌아갑니다.
 - 자세한 내용: `docs/development.md`, `docs/backend.md`, `docs/ci-deploy.md`, `docs/concurrency.md`, `docs/design.md`
