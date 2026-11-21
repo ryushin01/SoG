@@ -1,7 +1,7 @@
 # SoG - System of Goods
 
 [![CI](https://github.com/ryushin01/SoG/actions/workflows/ci.yml/badge.svg)](https://github.com/ryushin01/SoG/actions/workflows/ci.yml)
-![version](https://img.shields.io/badge/version-1.4.0-911a46)
+![version](https://img.shields.io/badge/version-1.5.0-911a46)
 ![Angular](https://img.shields.io/badge/Angular-22-DD0031?logo=angular&logoColor=white)
 ![Storybook](https://img.shields.io/badge/Storybook-10-FF4785?logo=storybook&logoColor=white)
 
@@ -86,6 +86,8 @@ corepack enable pnpm
 pnpm install
 pnpm dev    # 백오피스 http://localhost:4200 · 실사 앱 http://localhost:4200/count/
 ```
+
+`.env` 없이 바로 데모 데이터(브라우저 안 데모 서버)로 돌고, 인터넷이 끊겨도 됩니다. 운영 배포에서 DB(Neon)가 끊기면 데모 데이터로 대신 보여 주고 화면에 안내를 띄웁니다([실제 서버](docs/backend.md)).
 
 | 명령 | 설명 |
 |---|---|

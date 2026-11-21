@@ -43,6 +43,11 @@ export class WmsHost {
   private readonly listeners = new Set<(event: ChangeEvent) => void>();
 
   readonly mode = signal<WmsMode | null>(null);
+  /**
+   * 공개 데모 배포인데 DB(실제 서버)에 닿지 않아 브라우저 안 데모 서버로 대신 보여 주는 중인지.
+   * 화면이 `role="status"` 안내를 띄웁니다.
+   */
+  readonly fallback = signal(false);
   /** 마지막으로 받은 변경 알림 */
   readonly lastChange = signal<ChangeEvent | null>(null);
   /** 이 탭의 식별자. 자기 변경인지 구분합니다. 실제 서버 모드에서는 x-sog-origin으로 보냅니다. */
@@ -57,7 +62,10 @@ export class WmsHost {
   ready(): Promise<WmsMode> {
     this.modePromise ??= (async () => {
       const remembered = readMode();
-      const checked = checkMode();
+      const checked = checkMode().then((result) => {
+        if (result?.fallback) this.fallback.set(true);
+        return result?.mode ?? null;
+      });
       if (remembered) {
         void checked.then((mode) => {
           // 새 모드가 기기에 저장됐을 때만 다시 엽니다. 저장 공간이 가득 차 쓰지 못하면 다시 열어도
@@ -141,7 +149,7 @@ export class WmsHost {
  * /api/health로 실제 서버가 있는지 묻습니다. 정할 수 없으면(서버 일시 오류, 오프라인) null.
  * 404(API가 없는 정적 배포)·503(DB를 연결하지 않은 배포)은 데모 모드입니다.
  */
-async function checkMode(): Promise<WmsMode | null> {
+async function checkMode(): Promise<{ mode: WmsMode; fallback: boolean } | null> {
   try {
     const response = await fetch('/api/health', {
       cache: 'no-store',
@@ -151,11 +159,13 @@ async function checkMode(): Promise<WmsMode | null> {
       const body = check(healthSchema(), await response.json());
       const mode: WmsMode = body.ok && body.value.mode === 'remote' ? 'remote' : 'local';
       writeMode(mode);
-      return mode;
+      return { mode, fallback: false };
     }
     if (response.status === 404 || response.status === 503) {
       writeMode('local');
-      return 'local';
+      // 공개 데모에서 DB가 끊겼으면 Worker가 503과 DB_UNAVAILABLE을 알립니다(DB를 붙이지 않은 배포와 구분).
+      const body = check(healthSchema(), await response.json().catch(() => null));
+      return { mode: 'local', fallback: body.ok && body.value.code === 'DB_UNAVAILABLE' };
     }
     // 서버 일시 오류(500 등)로 실제 서버 사용자를 데모 데이터로 보내지 않습니다.
     return null;

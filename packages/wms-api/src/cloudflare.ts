@@ -117,6 +117,28 @@ function closeAfterPending(db: SqlDatabase): SqlDatabase & { stats: DbStats } {
   };
 }
 
+/** 상태 확인에서 DB가 이 시간 안에 답하지 않으면 끊긴 것으로 봅니다. */
+const HEALTH_TIMEOUT_MS = 3000;
+
+/** DB에 `select 1`을 보내 시간 안에 답하는지 봅니다. 연결은 응답 뒤에 닫습니다. */
+async function reachable(database: SqlDatabase, ctx: WorkerContext): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      database.query('select 1').then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), HEALTH_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.error(error);
+    return false;
+  } finally {
+    clearTimeout(timer);
+    ctx.waitUntil(database.close().catch((error: unknown) => console.error(error)));
+  }
+}
+
 /** Server-Timing을 붙입니다(브라우저 개발자 도구의 네트워크 탭 Timing에 보임). */
 function withTiming(response: Response, started: number, stats: DbStats): Response {
   const result = new Response(response.body, response);
@@ -154,9 +176,20 @@ export function createWorker(openDatabase: OpenDatabase) {
         message: '이 배포에는 DB가 연결되어 있지 않습니다.',
       });
     }
-    // 상태 확인은 DB에 묻지 않고 답합니다. DB가 잠시 응답하지 않아도 앱이 데모 모드로 바뀌어
-    // 가짜 데이터를 실제처럼 보여 주는 일이 없게 하고, 장애는 각 요청의 오류로 드러나게 합니다.
-    if (new URL(request.url).pathname === '/api/health') return json(200, { mode: 'remote' });
+    if (new URL(request.url).pathname === '/api/health') {
+      // 실제 운영(DEMO_RESET=off)은 DB에 묻지 않고 답합니다. DB가 잠시 응답하지 않아도 앱이 데모 모드로
+      // 바뀌어 가짜 데이터를 실제처럼 보여 주는 일이 없게 하고, 장애는 각 요청의 오류로 드러나게 합니다.
+      if (env.DEMO_RESET === 'off') return json(200, { mode: 'remote' });
+      // 공개 데모는 포트폴리오라 DB(Neon)가 끊겨도 화면이 보여야 합니다. DB에 닿지 않으면 503으로 답해
+      // 앱이 브라우저 안 데모 서버로 바꾸고 "DB에 연결할 수 없어 데모 데이터로 보여 준다"고 알리게 합니다.
+      return (await reachable(openDatabase({ ...env, HYPERDRIVE: hyperdrive }), ctx))
+        ? json(200, { mode: 'remote' })
+        : json(503, {
+            mode: 'local',
+            code: 'DB_UNAVAILABLE',
+            message: 'DB에 연결할 수 없어 브라우저 안 데모 서버로 보여 줍니다.',
+          });
+    }
     if (!authSecret) {
       console.error(
         '[sog] AUTH_SECRET이 없습니다. wrangler secret put AUTH_SECRET으로 넣어 주세요.',

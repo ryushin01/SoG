@@ -33,10 +33,18 @@ export function userListSchema(): Schema<User[]> {
   return (userList ??= z.array(user()));
 }
 
-let health: Schema<{ mode: 'remote' | 'local' }> | undefined;
-/** 실제 서버의 상태 확인(`/api/health`) 응답 */
-export function healthSchema(): Schema<{ mode: 'remote' | 'local' }> {
-  return (health ??= z.object({ mode: z.enum(['remote', 'local']) }));
+/** 실제 서버의 상태 확인(`/api/health`) 응답. 공개 데모에서 DB가 끊겼으면 503과 `code: 'DB_UNAVAILABLE'` */
+export interface Health {
+  mode: 'remote' | 'local';
+  code?: string | undefined;
+}
+
+let health: Schema<Health> | undefined;
+export function healthSchema(): Schema<Health> {
+  return (health ??= z.object({
+    mode: z.enum(['remote', 'local']),
+    code: z.optional(z.string()),
+  }));
 }
 
 let reloadMark: Schema<{ url: string; at: number }> | undefined;
